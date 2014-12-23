@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration shutdownHook="disable" monitorInterval="30">
+    <properties>
+        <property name="filters">org.junit,org.apache.maven,com.intellij,sun.reflect,java.lang.reflect</property>
+    </properties>
+    <Appenders>
+        <Console name="STDOUT">
+            <PatternLayout alwaysWriteExceptions="false"
+                           pattern="%d %-5p %t %c{1.} - %replace{%m %X%n%ex{filters(${filters})}}{([\r\n]+)(\S)}{$1 $2}"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="io.praesid" level="DEBUG" additivity="false">
+            <AppenderRef ref="STDOUT"/>
+        </Logger>
+        <Root level="WARN">
+            <AppenderRef ref="STDOUT"/>
+        </Root>
+    </Loggers>
+</Configuration>
