@@ -1,9 +1,10 @@
 package io.praesid.livestats;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.AtomicDouble;
 
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Collections;
@@ -13,22 +14,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoublePredicate;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @ThreadSafe
 public class LiveStats implements DoublePredicate, DoubleConsumer {
 
-    private AtomicDouble minVal = new AtomicDouble(Double.MAX_VALUE);
-    private AtomicDouble maxVal = new AtomicDouble(Double.MIN_VALUE);
-    private double varM2 = 0.;
-    private double kurtM4 = 0.;
-    private double skewM3 = 0.;
-    private int fullStatsCount = 0;
-    private double average = 0.;
-    private AtomicInteger count = new AtomicInteger(0);
+    private static final double[] DEFAULT_TILES = {0.5};
+
+    private final AtomicDouble minVal = new AtomicDouble(Double.MAX_VALUE);
+    private final AtomicDouble maxVal = new AtomicDouble(Double.MIN_VALUE);
+    private final AtomicDouble varM2 =  new AtomicDouble(0);
+    private final AtomicDouble kurtM4 = new AtomicDouble(0);
+    private final AtomicDouble skewM3 = new AtomicDouble(0);
+    private final AtomicInteger fullStatsCount = new AtomicInteger(0);
+    private final AtomicDouble average = new AtomicDouble(0);
+    private final AtomicInteger count = new AtomicInteger(0);
     private final double fullStatsProbability;
-    private final Quantile[] tiles;
+    private final ImmutableList<Quantile> tiles;
 
     /**
      * Constructs a LiveStats object
@@ -40,7 +44,12 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
      */
     public LiveStats(final double fullStatsProbability, final double... p) {
         this.fullStatsProbability = fullStatsProbability;
-        tiles = Arrays.stream(p.length == 0 ? new double[]{0.5} : p).mapToObj(Quantile::new).toArray(Quantile[]::new);
+        tiles = Arrays.stream(p.length == 0 ? DEFAULT_TILES : p)
+                      .mapToObj(Quantile::new)
+                      .collect(Collector.of(ImmutableList::<Quantile>builder,
+                                            Builder::add,
+                                            (a, b) -> a.addAll(b.build()),
+                                            Builder::build));
     }
 
     /**
@@ -88,32 +97,25 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
         count.incrementAndGet();
 
         if (ThreadLocalRandom.current().nextDouble() < fullStatsProbability) {
-            synchronized(this) {
-                fullStatsCount++;
+            tiles.forEach(tile -> tile.add(item));
 
-                //tiles
-                for (final Quantile tile : tiles) {
-                    tile.add(item);
-                }
+            final int myCount = fullStatsCount.incrementAndGet();
 
-                final double preDelta = item - average;
-                //Average
-                average += preDelta / fullStatsCount;
+            final double preDelta = item - average.get();
+            // This is wrong if it matters that post delta is relative to a different point in "time" than the pre delta
+            final double postDelta = item - average.addAndGet(preDelta / myCount);
 
+            //Variance(except for the scale)
+            varM2.addAndGet(preDelta * postDelta);
 
-                final double postDelta = item - average;
-                //Variance(except for the scale)
-                varM2 += preDelta * postDelta;
+            final double cubedPostDelta = Math.pow(postDelta, 3);
+            //Skewness
+            skewM3.addAndGet(cubedPostDelta);
 
-                final double cubedPostDelta = Math.pow(postDelta, 3);
-                //Skewness
-                skewM3 += cubedPostDelta;
+            //Kurtosis
+            kurtM4.addAndGet(cubedPostDelta * postDelta);
 
-                //Kurtosis
-                kurtM4 += cubedPostDelta * postDelta;
-
-                return true;
-            }
+            return true;
         }
         return false;
     }
@@ -121,7 +123,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
     /**
      * @return a Map of quantile to approximate value
      */
-    public synchronized Map<Double, Double> quantiles() {
+    public Map<Double, Double> quantiles() {
         final ImmutableMap.Builder<Double, Double> builder = ImmutableMap.builder();
         for (final Quantile tile : tiles) {
             builder.put(tile.p, tile.quantile());
@@ -134,7 +136,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
     }
 
     public double mean() {
-        return average;
+        return average.get();
     }
 
     public double minimum() {
@@ -145,28 +147,29 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
         return count.get();
     }
 
-    public synchronized double variance() {
-        if (fullStatsCount > 1) {
-            return varM2 / fullStatsCount;
-        }
-        return Double.NaN;
+    public double variance() {
+        return varM2.get() / fullStatsCount.get();
     }
 
-    public synchronized double kurtosis() {
-        if (fullStatsCount > 1) {
-            return kurtM4 / (fullStatsCount * Math.pow(variance(), 2)) - 3;
-        }
-        return Double.NaN;
+    public double kurtosis() {
+        // k / (c * (v/c)^2) - 3
+        // k / (c * (v/c) * (v/c)) - 3
+        // k / (v * v / c) - 3
+        // k * c / (v * v) - 3
+        final double myVarM2 = varM2.get();
+        return kurtM4.get() * fullStatsCount.get() / (myVarM2 * myVarM2) - 3;
     }
 
-    public synchronized double skewness() {
-        if (fullStatsCount > 1) {
-            return skewM3 / (fullStatsCount * Math.pow(variance(), 1.5));
-        }
-        return Double.NaN;
+    public double skewness() {
+        // s / (c * (v/c)^(3/2))
+        // s / (c * (v/c) * (v/c)^(1/2))
+        // s / (v * sqrt(v/c))
+        // s * sqrt(c/v) / v
+        final double myVarM2 = varM2.get();
+        return skewM3.get() * Math.sqrt(fullStatsCount.get() / myVarM2) / myVarM2;
     }
 
-    @NotThreadSafe
+    @ThreadSafe
     private static class Quantile {
         private static final int LEN = 5; // dn and npos must be updated if this is changed
 
@@ -191,7 +194,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
         /**
          * Adds another datum
          */
-        public void add(double item) {
+        public synchronized void add(double item) {
             if (initialized < LEN) {
                 heights[initialized] = item;
                 initialized++;
@@ -251,13 +254,14 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
             }
         }
 
-        public double quantile() {
+        public synchronized double quantile() {
             if (initialized == LEN) {
                 return heights[2];
+            } else {
+                Arrays.sort(heights); // Not fully initialized, probably not in order
+                // make sure we don't overflow on p == 1 or underflow on p == 0
+                return heights[Math.min(Math.max(initialized - 1, 0), (int)(initialized * p))];
             }
-            Arrays.sort(heights);
-            // make sure we don't overflow on p == 1 or underflow on p == 0
-            return heights[Math.min(Math.max(initialized - 1, 0), (int)(initialized * p))];
         }
 
     }
