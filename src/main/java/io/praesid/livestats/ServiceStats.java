@@ -1,19 +1,20 @@
 package io.praesid.livestats;
 
-import com.google.common.collect.ImmutableMap;
-import lombok.ToString;
+import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.function.BiConsumer;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
-public class ServiceStats implements BiConsumer<String, Double> {
+public class ServiceStats {
     private static final Logger log = LogManager.getLogger();
 
     private Map<String, LiveStats> stats = new ConcurrentSkipListMap<>();
@@ -23,74 +24,74 @@ public class ServiceStats implements BiConsumer<String, Double> {
         statsMaker = ignored -> new LiveStats(sampleProbability, quantiles);
     }
 
-    public void addTiming(final String key, final double value) {
+    public void put(final String key, final double value) {
         addTiming(key, value, System.nanoTime());
     }
 
-    @Override
-    public void accept(final String key, final Double value) {
-        addTiming(key, value);
+    public void complete(final String key, final long startNanos) {
+        final long endNanos = System.nanoTime();
+        addTiming(key, endNanos - startNanos, endNanos);
     }
 
-    private void addTiming(final String key, final double value, final long end) {
-        final boolean fullStats = stats.computeIfAbsent(key, statsMaker).add(value);
-        final long overhead = System.nanoTime() - end;
-        if (log.isTraceEnabled()) {
-            stats.computeIfAbsent("overhead/" + (fullStats ? "full" : "short"), statsMaker).add(overhead);
+    public <T> T collectTiming(final String description, final Supplier<T> subject) {
+        final long startNanos = System.nanoTime();
+        boolean error = false;
+        try {
+            return subject.get();
+        } catch (final Throwable t) {
+            error = true;
+            throw t;
+        } finally {
+            complete(appendSubType(description, true, error), startNanos);
         }
     }
 
-    public <T> T collectTiming(final String description, final Supplier<T> subjectFn, final Predicate<T> successful) {
+    public <T> T collectTiming(final String description, final Supplier<T> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
         boolean success = false;
-        Throwable ex = null;
+        boolean error = false;
         long end = -1;
         try {
-            final T result = subjectFn.get();
+            final T result = subject.get();
             end = System.nanoTime(); // count predicate check as overhead
             success = successful.test(result);
             return result;
         } catch (final Throwable t) {
             end = System.nanoTime(); // because of counting the predicate as overhead on success
-            ex = t;
+            error = true;
             throw t;
         } finally {
-            final long nanos = end - start;
-            final String key = description + '/' + (success ? "success" : ex == null ? "failure" : "exception");
-            addTiming(key, nanos, end);
+            addTiming(appendSubType(description, success, error), end - start, end);
         }
     }
 
-    public void clear() {
-        stats.clear();
-    }
-
-    public Stream<Summary> sumaries() {
-        return stats.entrySet().stream().map(e -> new Summary(e.getKey(), e.getValue()));
-    }
-
-    @ToString
-    public static final class Summary {
-        public final String name;
-        public final int n;
-        public final int min;
-        public final int max;
-        public final double mean;
-        public final double variance;
-        public final double skewness;
-        public final double kurtosis;
-        public final Map<Double, Double> quantiles;
-
-        public Summary(final String name, final LiveStats stats) {
-            this.name = name;
-            n = stats.num();
-            min = (int)stats.minimum();
-            max = (int)stats.maximum();
-            mean = stats.mean();
-            this.variance = stats.variance();
-            skewness = stats.skewness();
-            kurtosis = stats.kurtosis();
-            quantiles = ImmutableMap.copyOf(stats.quantiles());
+    /**
+     * Consumes a snapshot of the live stats currently collected
+     * @return stats snapshots
+     */
+    public Stats[] consume() {
+        final List<Map.Entry<String, LiveStats>> savedStats = new ArrayList<>();
+        final Iterator<Map.Entry<String, LiveStats>> entryIterator = stats.entrySet().iterator();
+        while (entryIterator.hasNext()) {
+            savedStats.add(entryIterator.next());
+            entryIterator.remove();
         }
+        // Stats overhead is in the microsecond range, so give a millisecond here for anyone in addTiming() to finish
+        Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+        return savedStats.stream().map(e -> new Stats(e.getKey(), e.getValue())).toArray(Stats[]::new);
+    }
+
+    private void addTiming(final String key, final double value, final long endNanos) {
+        final boolean fullStats = stats.computeIfAbsent(key, statsMaker).add(value);
+        if (log.isTraceEnabled()) {
+            final long overhead = System.nanoTime() - endNanos;
+            stats.computeIfAbsent("overhead/" + (fullStats ? "full" : "short"), statsMaker).add(overhead);
+        }
+    }
+
+    private String appendSubType(final String description, final boolean success, final boolean error) {
+        // Check error first because collectTiming(description, subject) always passes true for success
+        final String subType = error ? "error" : success ? "success" : "failure";
+        return description + '/' + subType;
     }
 }
