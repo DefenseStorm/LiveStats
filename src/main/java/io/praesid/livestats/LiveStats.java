@@ -265,7 +265,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
 
     }
 
-    private static double calcP2(double d, double q, double qp1, double qm1, double n, double np1, double nm1) {
+    private static double calcP2(int d, double q, double qp1, double qm1, double n, double np1, double nm1) {
         final double outer = d / (np1 - nm1);
         final double innerLeft = (n - nm1 + d) * (qp1 - q) / (np1 - n);
         final double innerRight = (np1 - n - d) * (q - qm1) / (n - nm1);
