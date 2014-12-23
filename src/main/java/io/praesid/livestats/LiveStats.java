@@ -170,13 +170,13 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
 
     @ThreadSafe
     private static class Quantile {
-        private static final int LEN = 5; // dn and npos must be updated if this is changed
+        private static final int N_MARKERS = 5; // dn and npos must be updated if this is changed
 
         private final double[] dn; // Immutable
         private final double[] npos;
         private final int[] pos;
         private final double[] heights;
-        private int initialized = LEN;
+        private int initialized = N_MARKERS;
         public final double p;
 
         /**
@@ -186,18 +186,18 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
             this.p = p;
             dn = new double[]{0, p / 2, p, (1 + p) / 2, 1};
             npos = new double[]{1, 1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
-            pos = IntStream.range(1, LEN + 1).toArray();
-            heights = new double[LEN];
+            pos = IntStream.range(1, N_MARKERS + 1).toArray();
+            heights = new double[N_MARKERS];
         }
 
         /**
          * Adds another datum
          */
         public synchronized void add(double item) {
-            if (initialized < LEN) {
+            if (initialized < N_MARKERS) {
                 heights[initialized] = item;
                 initialized++;
-                if (initialized == LEN) {
+                if (initialized == N_MARKERS) {
                     Arrays.sort(heights);
                 }
                 return;
@@ -207,11 +207,11 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
             if (item < heights[0]) {
                 heights[0] = item;
                 k = 1;
-            } else if (item >= heights[LEN - 1]) {
-                heights[LEN - 1] = item;
+            } else if (item >= heights[N_MARKERS - 1]) {
+                heights[N_MARKERS - 1] = item;
                 k = 4;
             } else {
-                int i = 1; // Linear search is fastest for small LEN
+                int i = 1; // Linear search is fastest because N_MARKERS is small
                 while (item >= heights[i]) {
                     i++;
                 }
@@ -220,13 +220,13 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
 
             IntStream.range(k, pos.length).forEach(i -> pos[i]++); // increment all positions greater than k
 
-            IntStream.range(0, npos.length).forEach(i -> npos[i] += dn[i]);
+            IntStream.range(1, npos.length).forEach(i -> npos[i] += dn[i]);
 
             adjust();
         }
 
         private void adjust() {
-            for (int i = 1; i < LEN - 1; i++) {
+            for (int i = 1; i < N_MARKERS - 1; i++) {
                 final int n = pos[i];
                 final double q = heights[i];
 
@@ -239,7 +239,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
                     final double qm1 = heights[i - 1];
                     final int np1 = pos[i + 1];
                     final int nm1 = pos[i - 1];
-                    final double qn = calcP2(qp1, q, qm1, d, np1, n, nm1);
+                    final double qn = calcP2(d, q, qp1, qm1, n, np1, nm1);
 
                     if (qm1 < qn && qn < qp1) {
                         heights[i] = qn;
@@ -254,7 +254,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
         }
 
         public synchronized double quantile() {
-            if (initialized == LEN) {
+            if (initialized == N_MARKERS) {
                 return heights[2];
             } else {
                 Arrays.sort(heights); // Not fully initialized, probably not in order
@@ -265,7 +265,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
 
     }
 
-    private static double calcP2(double qp1, double q, double qm1, double d, double np1, double n, double nm1) {
+    private static double calcP2(double d, double q, double qp1, double qm1, double n, double np1, double nm1) {
         final double outer = d / (np1 - nm1);
         final double innerLeft = (n - nm1 + d) * (qp1 - q) / (np1 - n);
         final double innerRight = (np1 - n - d) * (q - qm1) / (n - nm1);
