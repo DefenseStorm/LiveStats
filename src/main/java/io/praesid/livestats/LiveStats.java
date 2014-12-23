@@ -105,15 +105,17 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
             // This is wrong if it matters that post delta is relative to a different point in "time" than the pre delta
             final double postDelta = item - average.addAndGet(preDelta / myCount);
 
+            final double d2 = postDelta * postDelta;
             //Variance(except for the scale)
-            varM2.addAndGet(preDelta * postDelta);
+            varM2.addAndGet(d2);
 
-            final double cubedPostDelta = Math.pow(postDelta, 3);
+            final double d3 = d2 * postDelta;
             //Skewness
-            skewM3.addAndGet(cubedPostDelta);
+            skewM3.addAndGet(d3);
 
+            final double d4 = d3 * postDelta;
             //Kurtosis
-            kurtM4.addAndGet(cubedPostDelta * postDelta);
+            kurtM4.addAndGet(d4);
 
             return true;
         }
