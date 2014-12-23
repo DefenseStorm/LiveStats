@@ -76,6 +76,7 @@ public class ServiceStats implements BiConsumer<String, Double> {
         public final int min;
         public final int max;
         public final double mean;
+        public final double variance;
         public final double skewness;
         public final double kurtosis;
         public final Map<Double, Double> quantiles;
@@ -86,6 +87,7 @@ public class ServiceStats implements BiConsumer<String, Double> {
             min = (int)stats.minimum();
             max = (int)stats.maximum();
             mean = stats.mean();
+            this.variance = stats.variance();
             skewness = stats.skewness();
             kurtosis = stats.kurtosis();
             quantiles = ImmutableMap.copyOf(stats.quantiles());
