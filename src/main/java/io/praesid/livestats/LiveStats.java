@@ -221,7 +221,7 @@ public class LiveStats implements DoubleConsumer {
                 final double d0 = npos[i] - n;
 
                 if ((d0 >= 1 && pos[i + 1] > n + 1) || (d0 <= -1 && pos[i - 1] < n - 1)) {
-                    final int d = (int)Math.signum(d0);
+                    final int d = d0 > 0 ? 1 : -1;
 
                     final double q = heights[i];
                     final double qp1 = heights[i + 1];
