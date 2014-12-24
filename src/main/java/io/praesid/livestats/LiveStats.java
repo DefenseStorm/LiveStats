@@ -186,6 +186,7 @@ public class LiveStats implements DoubleConsumer {
                 }
                 return;
             }
+
             // find cell k
             final int k;
             if (item < heights[0]) {
@@ -193,7 +194,7 @@ public class LiveStats implements DoubleConsumer {
                 k = 1;
             } else if (item >= heights[N_MARKERS - 1]) {
                 heights[N_MARKERS - 1] = item;
-                k = 4;
+                k = N_MARKERS - 1;
             } else {
                 int i = 1; // Linear search is fastest because N_MARKERS is small
                 while (item >= heights[i]) {
