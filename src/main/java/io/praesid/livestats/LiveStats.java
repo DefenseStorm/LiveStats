@@ -217,13 +217,13 @@ public class LiveStats implements DoubleConsumer {
         private void adjust() {
             for (int i = 1; i < N_MARKERS - 1; i++) {
                 final int n = pos[i];
-                final double q = heights[i];
 
                 final double d0 = npos[i] - n;
 
                 if ((d0 >= 1 && pos[i + 1] > n + 1) || (d0 <= -1 && pos[i - 1] < n - 1)) {
                     final int d = (int)Math.signum(d0);
 
+                    final double q = heights[i];
                     final double qp1 = heights[i + 1];
                     final double qm1 = heights[i - 1];
                     final int np1 = pos[i + 1];
