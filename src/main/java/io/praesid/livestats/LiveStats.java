@@ -203,9 +203,13 @@ public class LiveStats implements DoubleConsumer {
                 k = i;
             }
 
-            IntStream.range(k, pos.length).forEach(i -> pos[i]++); // increment all positions greater than k
+            for (int i = k; i < pos.length; i++) {
+                pos[i]++; // increment all positions greater than k
+            }
 
-            IntStream.range(1, npos.length).forEach(i -> npos[i] += dn[i]);
+            for (int i = 1; i < npos.length; i++) {
+                npos[i] += dn[i]; // updated desired positions
+            }
 
             adjust();
         }
