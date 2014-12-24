@@ -23,7 +23,7 @@ public class LiveStatsTest {
     private static final Stats expovarMaxPes =
             new Stats("", 0, 0, 0, 1, .5, .005, 5, quantileMaxPes(TEST_TILES, .2));
     private static final Stats knownMaxPes =
-            new Stats("", 0, 0, 0, 50, 20, 5, 300, ImmutableMap.of(0.25, 5., 0.5, 20., 0.75, 20.));
+            new Stats("", 0, 0, 0, 50, 30, 5, 300, ImmutableMap.of(0.25, 5., 0.5, 20., 0.75, 20.));
     private static final Stats uniformMaxPes =
             new Stats("", 0, 0, 0, 1, .2, .02, 200, quantileMaxPes(TEST_TILES, 15.));
     private static final Stats triangularMaxPes =
