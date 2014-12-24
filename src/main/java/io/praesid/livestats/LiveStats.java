@@ -63,7 +63,6 @@ public class LiveStats implements DoubleConsumer {
         final int myCount = count.incrementAndGet();
 
         final double preDelta = item - average.get();
-        // This is wrong if it matters that post delta is relative to a different point in "time" than the pre delta
         final double delta = item - average.addAndGet(preDelta / myCount);
 
         final double delta2 = delta * delta;
