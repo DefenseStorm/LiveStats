@@ -11,12 +11,10 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoubleConsumer;
-import java.util.stream.Collector;
-import java.util.stream.IntStream;
 
 @ThreadSafe
 @ToString
-public class LiveStats implements DoubleConsumer {
+public final class LiveStats implements DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
 
@@ -30,15 +28,15 @@ public class LiveStats implements DoubleConsumer {
     /**
      * Constructs a LiveStats object
      *
-     * @param p A list of quantiles to track (default {0.5})
+     * @param p An array of quantiles to track (default {0.5})
      */
     public LiveStats(final double... p) {
-        tiles = Arrays.stream(p.length == 0 ? DEFAULT_TILES : p)
-                      .mapToObj(Quantile::new)
-                      .collect(Collector.of(ImmutableList::<Quantile>builder,
-                                            Builder::add,
-                                            (a, b) -> a.addAll(b.build()),
-                                            Builder::build));
+        final Builder<Quantile> tilesBuilder = ImmutableList.builder();
+        final double[] tiles = p.length == 0 ? DEFAULT_TILES : p;
+        for (final double tile : tiles) {
+            tilesBuilder.add(new Quantile(tile));
+        }
+        this.tiles = tilesBuilder.build();
     }
 
     /**
@@ -125,14 +123,14 @@ public class LiveStats implements DoubleConsumer {
 
     @ThreadSafe
     @ToString
-    private static class Quantile {
+    private static final class Quantile {
         private static final int N_MARKERS = 5; // dn and npos must be updated if this is changed
 
         private final double[] dn; // Immutable
         private final double[] npos;
-        private final int[] pos;
+        private final int[] pos = {1, 2, 3, 4, 5};
         private final double[] heights;
-        private int initialized = 0;
+        private int initialized;
         public final double p;
 
         /**
@@ -142,7 +140,7 @@ public class LiveStats implements DoubleConsumer {
             this.p = p;
             dn = new double[]{0, p / 2, p, (1 + p) / 2, 1};
             npos = new double[]{1, 1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
-            pos = IntStream.range(1, N_MARKERS + 1).toArray();
+            initialized = 0;
             heights = new double[N_MARKERS];
         }
 
