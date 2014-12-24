@@ -91,13 +91,13 @@ public class LiveStatsTest {
         assertEquals("count", real.n, live.n);
         assertEquals("min", real.min, live.min, Math.ulp(real.min));
         assertEquals("max", real.max, live.max, Math.ulp(real.max));
-        assertEquals("meanPE", 0., 100 * (live.mean - real.mean) / real.mean, .1);
         for (double tile : tiles) {
             assertEquals("p" + tile + "PE",
                          0.,
                          100 * (live.quantiles.get(tile) - real.quantiles.get(tile)) / real.quantiles.get(tile),
                          1.);
         }
+        assertEquals("meanPE", 0., 100 * (live.mean - real.mean) / real.mean, .1);
         assertEquals("variancePE", 0., 100 * (live.variance - real.variance) / real.variance, 1.);
         assertEquals("skewnessPE", 0., 100 * (live.skewness - real.skewness) / real.skewness, 1.);
         assertEquals("kurtosisPE", 0., 100 * (live.kurtosis - real.kurtosis) / real.kurtosis, 1.);
