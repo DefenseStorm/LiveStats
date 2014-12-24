@@ -165,6 +165,15 @@ public class LiveStats implements DoubleConsumer {
             return heights[initialized - 1];
         }
 
+        public synchronized double quantile() {
+            if (initialized != N_MARKERS) {
+                Arrays.sort(heights); // Not fully initialized, probably not in order
+                // make sure we don't overflow on p == 1 or underflow on p == 0
+                return heights[Math.min(Math.max(initialized - 1, 0), (int)(initialized * p))];
+            }
+            return heights[2];
+        }
+
         /**
          * Adds another datum
          */
@@ -234,16 +243,6 @@ public class LiveStats implements DoubleConsumer {
             final double innerRight = (np1 - n - d) * (q - qm1) / (n - nm1);
 
             return q + outer * (innerLeft + innerRight);
-        }
-
-        public synchronized double quantile() {
-            if (initialized == N_MARKERS) {
-                return heights[2];
-            } else {
-                Arrays.sort(heights); // Not fully initialized, probably not in order
-                // make sure we don't overflow on p == 1 or underflow on p == 0
-                return heights[Math.min(Math.max(initialized - 1, 0), (int)(initialized * p))];
-            }
         }
 
     }
