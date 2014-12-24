@@ -234,7 +234,7 @@ public class LiveStats implements DoubleConsumer {
                         heights[i] = qn;
                     } else {
                         // use linear form
-                        heights[i] = q + d * (heights[i + d] - q) / (pos[i + d] - n);
+                        heights[i] = q + Math.copySign((heights[i + d] - q) / (pos[i + d] - n), d);
                     }
 
                     pos[i] = n + d;
@@ -242,12 +242,15 @@ public class LiveStats implements DoubleConsumer {
             }
         }
 
-        private static double calcP2(int d, double q, double qp1, double qm1, double n, double np1, double nm1) {
-            final double outer = d / (np1 - nm1);
-            final double innerLeft = (n - nm1 + d) * (qp1 - q) / (np1 - n);
-            final double innerRight = (np1 - n - d) * (q - qm1) / (n - nm1);
-
-            return q + outer * (innerLeft + innerRight);
+        private static double calcP2(int d, double q, double qp1, double qm1, int n, int np1, int nm1) {
+            // q + d / (np1 - nm1) * ((n - nm1 + d) * (qp1 - q) / (np1 - n) + (np1 - n - d) * (q - qm1) / (n - nm1))
+            final int leftX = n - nm1;
+            final int rightX = np1 - n;
+            final double rightScale = (leftX + d) / (double)rightX;
+            final double leftScale = (rightX - d) / (double)leftX;
+            final double leftHalf = leftScale * (q - qm1);
+            final double rightHalf = rightScale * (qp1 - q);
+            return q + Math.copySign((leftHalf + rightHalf) / (np1 - nm1), d);
         }
 
     }
