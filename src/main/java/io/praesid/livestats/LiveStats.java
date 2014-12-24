@@ -20,9 +20,9 @@ public class LiveStats implements DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
 
-    private final AtomicDouble varM2 =  new AtomicDouble(0);
-    private final AtomicDouble kurtM4 = new AtomicDouble(0);
-    private final AtomicDouble skewM3 = new AtomicDouble(0);
+    private final AtomicDouble cumulant2 =  new AtomicDouble(0);
+    private final AtomicDouble cumulant4 = new AtomicDouble(0);
+    private final AtomicDouble cumulant3 = new AtomicDouble(0);
     private final AtomicDouble average = new AtomicDouble(0);
     private final AtomicInteger count = new AtomicInteger(0);
     private final ImmutableList<Quantile> tiles;
@@ -64,19 +64,16 @@ public class LiveStats implements DoubleConsumer {
 
         final double preDelta = item - average.get();
         // This is wrong if it matters that post delta is relative to a different point in "time" than the pre delta
-        final double postDelta = item - average.addAndGet(preDelta / myCount);
+        final double delta = item - average.addAndGet(preDelta / myCount);
 
-        final double d2 = postDelta * postDelta;
-        //Variance(except for the scale)
-        varM2.addAndGet(d2);
+        final double delta2 = delta * delta;
+        cumulant2.addAndGet(delta2);
 
-        final double d3 = d2 * postDelta;
-        //Skewness
-        skewM3.addAndGet(d3);
+        final double delta3 = delta2 * delta;
+        cumulant3.addAndGet(delta3);
 
-        final double d4 = d3 * postDelta;
-        //Kurtosis
-        kurtM4.addAndGet(d4);
+        final double delta4 = delta3 * delta;
+        cumulant4.addAndGet(delta4);
     }
 
     /**
@@ -107,7 +104,7 @@ public class LiveStats implements DoubleConsumer {
     }
 
     public double variance() {
-        return varM2.get() / count.get();
+        return cumulant2.get() / count.get();
     }
 
     public double kurtosis() {
@@ -115,8 +112,8 @@ public class LiveStats implements DoubleConsumer {
         // k / (c * (v/c) * (v/c)) - 3
         // k / (v * v / c) - 3
         // k * c / (v * v) - 3
-        final double myVarM2 = varM2.get();
-        return kurtM4.get() * count.get() / (myVarM2 * myVarM2) - 3;
+        final double myCumulant2 = cumulant2.get();
+        return cumulant4.get() * count.get() / (myCumulant2 * myCumulant2) - 3;
     }
 
     public double skewness() {
@@ -124,8 +121,8 @@ public class LiveStats implements DoubleConsumer {
         // s / (c * (v/c) * (v/c)^(1/2))
         // s / (v * sqrt(v/c))
         // s * sqrt(c/v) / v
-        final double myVarM2 = varM2.get();
-        return skewM3.get() * Math.sqrt(count.get() / myVarM2) / myVarM2;
+        final double myCumulant2 = cumulant2.get();
+        return cumulant3.get() * Math.sqrt(count.get() / myCumulant2) / myCumulant2;
     }
 
     @ThreadSafe
