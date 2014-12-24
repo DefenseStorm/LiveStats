@@ -55,7 +55,6 @@ public class LiveStats implements DoubleConsumer {
      * Adds another datum
      *
      * @param item the value to add
-     * @return true if full stats were collected, false otherwise
      */
     public void add(double item) {
         tiles.forEach(tile -> tile.add(item));
