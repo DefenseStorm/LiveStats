@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.AtomicDouble;
+import lombok.ToString;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
@@ -16,6 +17,7 @@ import java.util.stream.Collector;
 import java.util.stream.IntStream;
 
 @ThreadSafe
+@ToString
 public class LiveStats implements DoublePredicate, DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
@@ -169,6 +171,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
     }
 
     @ThreadSafe
+    @ToString
     private static class Quantile {
         private static final int N_MARKERS = 5; // dn and npos must be updated if this is changed
 
