@@ -176,7 +176,7 @@ public class LiveStats implements DoublePredicate, DoubleConsumer {
         private final double[] npos;
         private final int[] pos;
         private final double[] heights;
-        private int initialized = N_MARKERS;
+        private int initialized = 0;
         public final double p;
 
         /**
