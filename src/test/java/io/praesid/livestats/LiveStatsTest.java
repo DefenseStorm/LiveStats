@@ -66,7 +66,7 @@ public class LiveStatsTest {
     }
 
     private void test(final String name, final double[] tiles, final double[] data, final Stats maxPes) {
-        final LiveStats stats = new LiveStats(1, tiles);
+        final LiveStats stats = new LiveStats(tiles);
 
         final long start = System.nanoTime();
         Arrays.stream(data).parallel().forEach(stats);

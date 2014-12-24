@@ -20,8 +20,8 @@ public class ServiceStats {
     private Map<String, LiveStats> stats = new ConcurrentSkipListMap<>();
     private final Function<String, LiveStats> statsMaker;
 
-    public ServiceStats(final double sampleProbability, final double... quantiles) {
-        statsMaker = ignored -> new LiveStats(sampleProbability, quantiles);
+    public ServiceStats(final double... quantiles) {
+        statsMaker = ignored -> new LiveStats(quantiles);
     }
 
     public void put(final String key, final double value) {
@@ -82,10 +82,10 @@ public class ServiceStats {
     }
 
     private void addTiming(final String key, final double value, final long endNanos) {
-        final boolean fullStats = stats.computeIfAbsent(key, statsMaker).add(value);
+        stats.computeIfAbsent(key, statsMaker).add(value);
         if (log.isTraceEnabled()) {
             final long overhead = System.nanoTime() - endNanos;
-            stats.computeIfAbsent("overhead/" + (fullStats ? "full" : "short"), statsMaker).add(overhead);
+            stats.computeIfAbsent("overhead", statsMaker).add(overhead);
         }
     }
 
