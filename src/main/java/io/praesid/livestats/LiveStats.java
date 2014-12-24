@@ -20,8 +20,6 @@ public class LiveStats implements DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
 
-    private final AtomicDouble minVal = new AtomicDouble(Double.MAX_VALUE);
-    private final AtomicDouble maxVal = new AtomicDouble(Double.MIN_VALUE);
     private final AtomicDouble varM2 =  new AtomicDouble(0);
     private final AtomicDouble kurtM4 = new AtomicDouble(0);
     private final AtomicDouble skewM3 = new AtomicDouble(0);
@@ -60,21 +58,6 @@ public class LiveStats implements DoubleConsumer {
      * @return true if full stats were collected, false otherwise
      */
     public void add(double item) {
-        double oldMin = minVal.get();
-        while (item < oldMin) {
-            if (minVal.compareAndSet(oldMin, item)) {
-                break;
-            }
-            oldMin = minVal.get();
-        }
-        double oldMax = maxVal.get();
-        while (item > oldMax) {
-            if (maxVal.compareAndSet(oldMax, item)) {
-                break;
-            }
-            oldMax = maxVal.get();
-        }
-
         tiles.forEach(tile -> tile.add(item));
 
         final int myCount = count.incrementAndGet();
@@ -108,7 +91,7 @@ public class LiveStats implements DoubleConsumer {
     }
 
     public double maximum() {
-        return maxVal.get();
+        return tiles.get(0).maximum();
     }
 
     public double mean() {
@@ -116,7 +99,7 @@ public class LiveStats implements DoubleConsumer {
     }
 
     public double minimum() {
-        return minVal.get();
+        return tiles.get(0).minimum();
     }
 
     public int num() {
@@ -166,6 +149,20 @@ public class LiveStats implements DoubleConsumer {
             npos = new double[]{1, 1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
             pos = IntStream.range(1, N_MARKERS + 1).toArray();
             heights = new double[N_MARKERS];
+        }
+
+        public synchronized double minimum() {
+            if (initialized < N_MARKERS) {
+                Arrays.sort(heights);
+            }
+            return heights[0];
+        }
+
+        public synchronized double maximum() {
+            if (initialized != N_MARKERS) {
+                Arrays.sort(heights);
+            }
+            return heights[initialized - 1];
         }
 
         /**
