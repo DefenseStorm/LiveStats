@@ -137,11 +137,13 @@ public class LiveStatsTest {
             s4.addAndGet(Math.pow(x - avg, 4));
         });
 
-        final double skew = Math.sqrt(data.length) * s3.get() / Math.pow(s2.get(), 3./2);
-        final double kurt = data.length * s4.get() / Math.pow(s2.get(), 2) - 3;
-        final double var = s2.get() / data.length;
+        final double u2 = s2.get() / data.length;
+        final double u3 = s3.get() / data.length;
+        final double u4 = s4.get() / data.length;
+        final double skew = u3 / Math.pow(u2, 3./2);
+        final double kurt = u4 / Math.pow(u2, 2) - 3;
 
-        return new Stats(name, data.length, data[0], data[data.length-1], avg, var, skew, kurt, quantiles);
+        return new Stats(name, data.length, data[0], data[data.length-1], avg, u2, skew, kurt, quantiles);
     }
 
 }
