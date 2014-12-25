@@ -18,7 +18,7 @@ public final class LiveStats implements DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
 
-    private final AtomicDouble average = new AtomicDouble(0);
+    private final AtomicDouble sum = new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment2 =  new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment3 = new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment4 = new AtomicDouble(0);
@@ -59,8 +59,9 @@ public final class LiveStats implements DoubleConsumer {
 
         final int myCount = count.incrementAndGet();
 
-        final double preDelta = item - average.get();
-        final double delta = item - average.addAndGet(preDelta / myCount);
+        final double mySum = sum.addAndGet(item);
+
+        final double delta = item - mySum / myCount;
 
         final double delta2 = delta * delta;
         sumCentralMoment2.addAndGet(delta2);
@@ -88,7 +89,7 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double mean() {
-        return average.get();
+        return sum.get() / count.get();
     }
 
     public double minimum() {
