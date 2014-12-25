@@ -18,10 +18,10 @@ public final class LiveStats implements DoubleConsumer {
 
     private static final double[] DEFAULT_TILES = {0.5};
 
-    private final AtomicDouble cumulant2 =  new AtomicDouble(0);
-    private final AtomicDouble cumulant4 = new AtomicDouble(0);
-    private final AtomicDouble cumulant3 = new AtomicDouble(0);
     private final AtomicDouble average = new AtomicDouble(0);
+    private final AtomicDouble sumCentralMoment2 =  new AtomicDouble(0);
+    private final AtomicDouble sumCentralMoment3 = new AtomicDouble(0);
+    private final AtomicDouble sumCentralMoment4 = new AtomicDouble(0);
     private final AtomicInteger count = new AtomicInteger(0);
     private final ImmutableList<Quantile> tiles;
 
@@ -63,13 +63,13 @@ public final class LiveStats implements DoubleConsumer {
         final double delta = item - average.addAndGet(preDelta / myCount);
 
         final double delta2 = delta * delta;
-        cumulant2.addAndGet(delta2);
+        sumCentralMoment2.addAndGet(delta2);
 
         final double delta3 = delta2 * delta;
-        cumulant3.addAndGet(delta3);
+        sumCentralMoment3.addAndGet(delta3);
 
         final double delta4 = delta3 * delta;
-        cumulant4.addAndGet(delta4);
+        sumCentralMoment4.addAndGet(delta4);
     }
 
     /**
@@ -100,25 +100,28 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double variance() {
-        return cumulant2.get() / count.get();
+        return sumCentralMoment2.get() / count.get();
     }
 
     public double kurtosis() {
-        // k / (c * (v/c)^2) - 3
-        // k / (c * (v/c) * (v/c)) - 3
-        // k / (v * v / c) - 3
-        // k * c / (v * v) - 3
-        final double myCumulant2 = cumulant2.get();
-        return cumulant4.get() * count.get() / (myCumulant2 * myCumulant2) - 3;
+        // u4 / u2^2 - 3
+        // (s4/c) / (s2/c)^2 - 3
+        // s4 / (c * (s2/c)^2) - 3
+        // s4 / (c * (s2/c) * (s2/c)) - 3
+        // s4 / (s2^2 / c) - 3
+        // s4 * c / s2^2 - 3
+        return sumCentralMoment4.get() * count.get() / Math.pow(sumCentralMoment2.get(), 2) - 3;
     }
 
     public double skewness() {
-        // s / (c * (v/c)^(3/2))
-        // s / (c * (v/c) * (v/c)^(1/2))
-        // s / (v * sqrt(v/c))
-        // s * sqrt(c/v) / v
-        final double myCumulant2 = cumulant2.get();
-        return cumulant3.get() * Math.sqrt(count.get() / myCumulant2) / myCumulant2;
+        // u3 / u2^(3/2)
+        // (s3/c) / (s2/c)^(3/2)
+        // s3 / (c * (s2/c)^(3/2))
+        // s3 / (c * (s2/c) * (s2/c)^(1/2))
+        // s3 / (s2 * sqrt(s2/c))
+        // s3 * sqrt(c/s2) / s2
+        final double mySumCentralMoment2 = sumCentralMoment2.get();
+        return sumCentralMoment3.get() * Math.sqrt(count.get() / mySumCentralMoment2) / mySumCentralMoment2;
     }
 
     @ThreadSafe
