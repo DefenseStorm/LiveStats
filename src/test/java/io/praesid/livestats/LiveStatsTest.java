@@ -22,13 +22,13 @@ public class LiveStatsTest {
     private static final double[] TEST_TILES = {0.25,0.5,0.75};
     private static final int TEST_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 1, .005, 5, quantileMaxPes(TEST_TILES, .5));
+            new Stats("", 0, 0, 0, .0000001, 1, .005, 10, quantileMaxPes(TEST_TILES, .5));
     private static final Stats knownMaxPes =
             new Stats("", 0, 0, 0, .0000001, 30, 5, 300, ImmutableMap.of(0.25, 5., 0.5, 20., 0.75, 20.));
     private static final Stats gaussianMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, 1, 50, quantileMaxPes(TEST_TILES, .1));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .02, 200, quantileMaxPes(TEST_TILES, 15.));
+            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(TEST_TILES, 15.));
     private static final Stats triangularMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(TEST_TILES, .2));
     private static final Stats bimodalMaxPes =
