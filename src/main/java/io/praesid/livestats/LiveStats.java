@@ -130,7 +130,7 @@ public final class LiveStats implements DoubleConsumer {
     private static final class Quantile {
         private static final int N_MARKERS = 5; // dn and npos must be updated if this is changed
 
-        private final double[] dn; // Immutable
+        private final double[] dn; // Immutable, how far the ideal positions move for each item
         private final double[] npos;
         private final int[] pos = {1, 2, 3, 4, 5};
         private final double[] heights;
