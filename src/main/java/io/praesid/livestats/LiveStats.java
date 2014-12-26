@@ -184,24 +184,14 @@ public final class LiveStats implements DoubleConsumer {
                 return;
             }
 
-            // find cell k
-            final int k;
-            if (item < heights[0]) {
-                heights[0] = item;
-                k = 1;
-            } else if (item >= heights[N_MARKERS - 1]) {
-                heights[N_MARKERS - 1] = item;
-                k = N_MARKERS - 1;
-            } else {
-                int i = 1; // Linear search is fastest because N_MARKERS is small
-                while (item >= heights[i]) {
-                    i++;
-                }
-                k = i;
+            if (item > heights[N_MARKERS - 1]) {
+                heights[N_MARKERS - 1] = item; // Marker N_MARKERS-1 is max
+            } else if (item < heights[0]) {
+                heights[0] = item; // Marker 0 is min
             }
-
-            for (int i = k; i < pos.length; i++) {
-                pos[i]++; // increment all positions greater than k
+            pos[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
+            for (int i = N_MARKERS - 2; heights[i] > item; i--) { // Increment all other markers > item
+                pos[i]++;
             }
 
             for (int i = 0; i < npos.length; i++) {
