@@ -142,8 +142,8 @@ public final class LiveStats implements DoubleConsumer {
          */
         public Quantile(double p) {
             this.p = p;
-            dn = new double[]{0, p / 2, p, (1 + p) / 2, 1};
-            npos = new double[]{1, 1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
+            dn = new double[]{p / 2, p, (1 + p) / 2, 1};
+            npos = new double[]{1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
             initialized = 0;
             heights = new double[N_MARKERS];
         }
@@ -204,7 +204,7 @@ public final class LiveStats implements DoubleConsumer {
                 pos[i]++; // increment all positions greater than k
             }
 
-            for (int i = 1; i < npos.length; i++) {
+            for (int i = 0; i < npos.length; i++) {
                 npos[i] += dn[i]; // updated desired positions
             }
 
@@ -215,7 +215,7 @@ public final class LiveStats implements DoubleConsumer {
             for (int i = 1; i < N_MARKERS - 1; i++) {
                 final int n = pos[i];
 
-                final double d0 = npos[i] - n;
+                final double d0 = npos[i - 1] - n;
 
                 if ((d0 >= 1 && pos[i + 1] > n + 1) || (d0 <= -1 && pos[i - 1] < n - 1)) {
                     final int d = d0 > 0 ? 1 : -1;
