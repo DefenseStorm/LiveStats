@@ -90,8 +90,8 @@ public class LiveStatsTest {
 
         final long end = System.nanoTime();
 
-        log.info("live ({}ns/datum): {}", (mid - start) / SAMPLE_COUNT, live);
-        log.info("real ({}ns/datum): {}", (end - mid) / SAMPLE_COUNT, real);
+        log.info("live ({}ns/datum): {}", (mid - start) / data.length, live);
+        log.info("real ({}ns/datum): {}", (end - mid) / data.length, real);
         assertEquals("name", real.name, live.name);
         assertEquals("count", real.n, live.n);
         assertEquals("min", real.min, live.min, maxPes.min);
