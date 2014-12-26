@@ -16,27 +16,24 @@ import java.util.function.DoubleConsumer;
 @ToString
 public final class LiveStats implements DoubleConsumer {
 
-    private static final double[] DEFAULT_TILES = {0.5};
-
     private final AtomicDouble sum = new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment2 =  new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment3 = new AtomicDouble(0);
     private final AtomicDouble sumCentralMoment4 = new AtomicDouble(0);
     private final AtomicInteger count = new AtomicInteger(0);
-    private final ImmutableList<Quantile> tiles;
+    private final ImmutableList<Quantile> quantiles;
 
     /**
      * Constructs a LiveStats object
      *
-     * @param p An array of quantiles to track (default {0.5})
+     * @param quantiles Quantiles to track (eg. .5 for the 50th percentile)
      */
-    public LiveStats(final double... p) {
+    public LiveStats(final double... quantiles) {
         final Builder<Quantile> tilesBuilder = ImmutableList.builder();
-        final double[] tiles = p.length == 0 ? DEFAULT_TILES : p;
-        for (final double tile : tiles) {
+        for (final double tile : quantiles) {
             tilesBuilder.add(new Quantile(tile));
         }
-        this.tiles = tilesBuilder.build();
+        this.quantiles = tilesBuilder.build();
     }
 
     /**
@@ -80,14 +77,14 @@ public final class LiveStats implements DoubleConsumer {
      */
     public Map<Double, Double> quantiles() {
         final ImmutableMap.Builder<Double, Double> builder = ImmutableMap.builder();
-        for (final Quantile tile : tiles) {
-            builder.put(tile.p, tile.quantile());
+        for (final Quantile quantile : quantiles) {
+            builder.put(quantile.percentile, quantile.quantile());
         }
         return builder.build();
     }
 
     public double maximum() {
-        return tiles.get(0).maximum();
+        return quantiles.get(0).maximum();
     }
 
     public double mean() {
@@ -95,7 +92,7 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double minimum() {
-        return tiles.get(0).minimum();
+        return quantiles.get(0).minimum();
     }
 
     public int num() {
@@ -130,43 +127,43 @@ public final class LiveStats implements DoubleConsumer {
     @ThreadSafe
     @ToString
     private static final class Quantile {
-        private static final int N_MARKERS = 5; // dn and npos must be updated if this is changed
+        private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
-        private final double[] dn; // Immutable, how far the ideal positions move for each item
-        private final double[] npos;
-        private final int[] pos = {1, 2, 3, 4, 5};
+        private final double[] positionDeltas; // Immutable, how far the ideal positions move for each item
+        private final double[] idealPositions;
+        private final int[] positions = {1, 2, 3, 4, 5};
         private final double[] heights = new double[N_MARKERS];
-        private int initialized = 0;
-        public final double p;
+        private int initializedMarkers = 0;
+        public final double percentile;
 
         /**
          * Constructs a single quantile object
          */
-        public Quantile(double p) {
-            this.p = p;
-            dn = new double[]{p / 2, p, (1 + p) / 2, 1};
-            npos = new double[]{1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
+        public Quantile(double percentile) {
+            this.percentile = percentile;
+            positionDeltas = new double[]{percentile / 2, percentile, (1 + percentile) / 2, 1};
+            idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
         }
 
         public synchronized double minimum() {
-            if (initialized < N_MARKERS) {
+            if (initializedMarkers < N_MARKERS) {
                 Arrays.sort(heights);
             }
             return heights[0];
         }
 
         public synchronized double maximum() {
-            if (initialized != N_MARKERS) {
+            if (initializedMarkers != N_MARKERS) {
                 Arrays.sort(heights);
             }
-            return heights[initialized - 1];
+            return heights[initializedMarkers - 1];
         }
 
         public synchronized double quantile() {
-            if (initialized != N_MARKERS) {
+            if (initializedMarkers != N_MARKERS) {
                 Arrays.sort(heights); // Not fully initialized, probably not in order
-                // make sure we don't overflow on p == 1 or underflow on p == 0
-                return heights[Math.min(Math.max(initialized - 1, 0), (int)(initialized * p))];
+                // make sure we don't overflow on percentile == 1 or underflow on percentile == 0
+                return heights[Math.min(Math.max(initializedMarkers - 1, 0), (int)(initializedMarkers * percentile))];
             }
             return heights[2];
         }
@@ -175,10 +172,10 @@ public final class LiveStats implements DoubleConsumer {
          * Adds another datum
          */
         public synchronized void add(double item) {
-            if (initialized < N_MARKERS) {
-                heights[initialized] = item;
-                initialized++;
-                if (initialized == N_MARKERS) {
+            if (initializedMarkers < N_MARKERS) {
+                heights[initializedMarkers] = item;
+                initializedMarkers++;
+                if (initializedMarkers == N_MARKERS) {
                     Arrays.sort(heights);
                 }
                 return;
@@ -189,13 +186,13 @@ public final class LiveStats implements DoubleConsumer {
             } else if (item < heights[0]) {
                 heights[0] = item; // Marker 0 is min
             }
-            pos[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
+            positions[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
             for (int i = N_MARKERS - 2; heights[i] > item; i--) { // Increment all other markers > item
-                pos[i]++;
+                positions[i]++;
             }
 
-            for (int i = 0; i < npos.length; i++) {
-                npos[i] += dn[i]; // updated desired positions
+            for (int i = 0; i < idealPositions.length; i++) {
+                idealPositions[i] += positionDeltas[i]; // updated desired positions
             }
 
             adjust();
@@ -203,41 +200,52 @@ public final class LiveStats implements DoubleConsumer {
 
         private void adjust() {
             for (int i = 1; i < N_MARKERS - 1; i++) {
-                final int n = pos[i];
+                final int position = positions[i];
 
-                final double d0 = npos[i - 1] - n;
+                final double positionDelta = idealPositions[i - 1] - position;
 
-                if ((d0 >= 1 && pos[i + 1] > n + 1) || (d0 <= -1 && pos[i - 1] < n - 1)) {
-                    final int d = d0 > 0 ? 1 : -1;
+                if ((positionDelta >= 1 && positions[i + 1] > position + 1) ||
+                        (positionDelta <= -1 && positions[i - 1] < position - 1)) {
+                    final int direction = positionDelta > 0 ? 1 : -1;
 
-                    final double q = heights[i];
-                    final double qp1 = heights[i + 1];
-                    final double qm1 = heights[i - 1];
-                    final int np1 = pos[i + 1];
-                    final int nm1 = pos[i - 1];
-                    final double qn = calcP2(d, q, qp1, qm1, n, np1, nm1);
+                    final double heightBelow = heights[i - 1];
+                    final double height = heights[i];
+                    final double heightAbove = heights[i + 1];
+                    final int positionBelow = positions[i - 1];
+                    final int positionAbove = positions[i + 1];
+                    final double newHeight = calcP2(direction, heightBelow, height, heightAbove,
+                                                    positionBelow, position, positionAbove);
 
-                    if (qm1 < qn && qn < qp1) {
-                        heights[i] = qn;
+                    if (heightBelow < newHeight && newHeight < heightAbove) {
+                        heights[i] = newHeight;
                     } else {
                         // use linear form
-                        heights[i] = q + Math.copySign((heights[i + d] - q) / (pos[i + d] - n), d);
+                        final double rise = heights[i + direction] - height;
+                        final int run = positions[i + direction] - position;
+                        heights[i] = height + Math.copySign(rise / run, direction);
                     }
 
-                    pos[i] = n + d;
+                    positions[i] = position + direction;
                 }
             }
         }
 
-        private static double calcP2(int d, double q, double qp1, double qm1, int n, int np1, int nm1) {
-            // q + d / (np1 - nm1) * ((n - nm1 + d) * (qp1 - q) / (np1 - n) + (np1 - n - d) * (q - qm1) / (n - nm1))
-            final int leftX = n - nm1;
-            final int rightX = np1 - n;
-            final double rightScale = (leftX + d) / (double)rightX;
-            final double leftScale = (rightX - d) / (double)leftX;
-            final double leftHalf = leftScale * (q - qm1);
-            final double rightHalf = rightScale * (qp1 - q);
-            return q + Math.copySign((leftHalf + rightHalf) / (np1 - nm1), d);
+        private static double calcP2(final /* d      */ int direction,
+                                     final /* q(i-1) */ double heightBelow,
+                                     final /* q(i)   */ double height,
+                                     final /* q(i+1) */ double heightAbove,
+                                     final /* n(i-1) */ int positionBelow,
+                                     final /* n(i)   */ int position,
+                                     final /* n(i+1) */ int positionAbove) {
+            // q + d / (n(i+1) - n(i-1) *
+            //     ((n - n(i-1) + d) * (q(i+1) - q) / (n(i+1) - n) + (n(i+1) - n - d) * (q - q(i-1)) / (n - n(i-1)))
+            final int xBelow = position - positionBelow;
+            final int xAbove = positionAbove - position;
+            final double belowScale = (xAbove - direction) / (double)xBelow;
+            final double aboveScale = (xBelow + direction) / (double)xAbove;
+            final double lowerHalf = belowScale * (height - heightBelow);
+            final double upperHalf = aboveScale * (heightAbove - height);
+            return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
         }
 
     }
