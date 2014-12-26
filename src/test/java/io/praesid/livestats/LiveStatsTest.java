@@ -25,9 +25,9 @@ public class LiveStatsTest {
     private static final double[] TEST_TILES = {.25,.5,.75,.9,.99,.999,.9999};
     private static final int TEST_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 5, .02, 20, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
+            new Stats("", 0, 0, 0, .0000001, 5, .02, 100, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
     private static final Stats knownMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 50));
+            new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 100));
     private static final Stats gaussianMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, 2, 500, quantileMaxPes(.2, .1, .1, .2, 1, 5, 20));
     private static final Stats uniformMaxPes =
@@ -35,7 +35,7 @@ public class LiveStatsTest {
     private static final Stats triangularMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
     private static final Stats bimodalMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
+            new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
 
     @Test
     public void testKnown() {
