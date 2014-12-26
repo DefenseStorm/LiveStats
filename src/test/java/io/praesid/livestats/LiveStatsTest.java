@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
 
 import static org.junit.Assert.assertEquals;
@@ -24,6 +25,8 @@ public class LiveStatsTest {
             new Stats("", 0, 0, 0, .0000001, 1, .005, 5, quantileMaxPes(TEST_TILES, .5));
     private static final Stats knownMaxPes =
             new Stats("", 0, 0, 0, .0000001, 30, 5, 300, ImmutableMap.of(0.25, 5., 0.5, 20., 0.75, 20.));
+    private static final Stats gaussianMaxPes =
+            new Stats("", 0, 0, 0, .0000001, .2, 1, 50, quantileMaxPes(TEST_TILES, .1));
     private static final Stats uniformMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, .02, 200, quantileMaxPes(TEST_TILES, 15.));
     private static final Stats triangularMaxPes =
@@ -43,6 +46,13 @@ public class LiveStatsTest {
         final double[] ux = IntStream.range(0, TEST_COUNT).asDoubleStream().toArray();
         Collections.shuffle(Arrays.asList(ux), ThreadLocalRandom.current()); // Shuffles the underlying array
         test("Uniform", TEST_TILES, ux, uniformMaxPes);
+    }
+
+    @Test
+    public void testGaussian() {
+        final double[] gx = DoubleStream.generate(ThreadLocalRandom.current()::nextGaussian).limit(TEST_COUNT)
+                                        .toArray();
+        test("Gaussian", TEST_TILES, gx, gaussianMaxPes);
     }
 
     @Test
