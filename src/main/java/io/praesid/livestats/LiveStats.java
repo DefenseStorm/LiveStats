@@ -55,7 +55,9 @@ public final class LiveStats implements DoubleConsumer {
      * @param item the value to add
      */
     public void add(double item) {
-        tiles.forEach(tile -> tile.add(item));
+        for (final Quantile quantile : quantiles) {
+            quantile.add(item);
+        }
 
         final int myCount = count.incrementAndGet();
 
