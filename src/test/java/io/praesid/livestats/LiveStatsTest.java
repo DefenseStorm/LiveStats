@@ -26,6 +26,8 @@ public class LiveStatsTest {
     private static final int SAMPLE_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
             new Stats("", 0, 0, 0, .0000001, 5, .02, 100, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
+    private static final Stats oneMaxPes =
+            new Stats("", 0, 0, 0, 0, 0, 0, 0, quantileMaxPes(0, 0, 0, 0, 0, 0, 0));
     private static final Stats knownMaxPes =
             new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 100));
     private static final Stats gaussianMaxPes =
@@ -38,10 +40,15 @@ public class LiveStatsTest {
             new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
 
     @Test
+    public void testOnePoint() { // Doesn't use SAMPLE_COUNT
+        test("One", DoubleStream.of(.02), oneMaxPes);
+    }
+
+    @Test
     public void testKnown() { // Doesn't use SAMPLE_COUNT
         final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
                                10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
-        test("Test", Arrays.stream(test), knownMaxPes);
+        test("Known", Arrays.stream(test), knownMaxPes);
     }
 
     @Test
@@ -99,13 +106,23 @@ public class LiveStatsTest {
         for (double tile : TEST_TILES) {
             assertEquals("p" + tile + "%e",
                          0.,
-                         100 * (live.quantiles.get(tile) - real.quantiles.get(tile)) / (real.max - real.min),
+                         calculateError(live.quantiles.get(tile), real.quantiles.get(tile), real.max - real.min),
                          maxPes.quantiles.get(tile));
         }
-        assertEquals("mean%e", 0., 100 * (live.mean - real.mean) / real.mean, maxPes.mean);
-        assertEquals("variance%e", 0., 100 * (live.variance - real.variance) / real.variance, maxPes.variance);
-        assertEquals("skewness%e", 0., 100 * (live.skewness - real.skewness) / (real.max - real.min), maxPes.skewness);
-        assertEquals("kurtosis%e", 0., 100 * (live.kurtosis - real.kurtosis) / real.kurtosis, maxPes.kurtosis);
+        assertEquals("mean%e", 0., calculateError(live.mean, real.mean, real.mean), maxPes.mean);
+        assertEquals("variance%e", 0., calculateError(live.variance, real.variance, real.variance), maxPes.variance);
+        assertEquals("skewness%e", 0., calculateError(live.skewness, real.skewness, real.max - real.min), maxPes.skewness);
+        assertEquals("kurtosis%e", 0., calculateError(live.kurtosis, real.kurtosis, real.kurtosis), maxPes.kurtosis);
+    }
+
+    private static double calculateError(final double live, final double real, final double denominator) {
+        if (live == real) {
+            return 0;
+        }
+        if (denominator == 0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return 100 * (live - real) / denominator;
     }
 
     private static DoubleUnaryOperator triangular(double low, double high, double mode) {
@@ -149,8 +166,8 @@ public class LiveStatsTest {
         final double u2 = s2.get() / data.length;
         final double u3 = s3.get() / data.length;
         final double u4 = s4.get() / data.length;
-        final double skew = u3 / Math.pow(u2, 3./2);
-        final double kurt = u4 / Math.pow(u2, 2) - 3;
+        final double skew = u3 == 0 ? 0 : (u3 / Math.pow(u2, 3./2));
+        final double kurt = u4 == 0 ? 0 : (u4 / Math.pow(u2, 2) - 3);
 
         return new Stats(name, data.length, data[0], data[data.length-1], avg, u2, skew, kurt, quantiles);
     }

@@ -110,7 +110,11 @@ public final class LiveStats implements DoubleConsumer {
         // s4 / (c * (s2/c) * (s2/c)) - 3
         // s4 / (s2^2 / c) - 3
         // s4 * c / s2^2 - 3
-        return sumCentralMoment4.get() * count.get() / Math.pow(sumCentralMoment2.get(), 2) - 3;
+        final double mySumCentralMoment4 = sumCentralMoment4.get();
+        if (mySumCentralMoment4 == 0) {
+            return 0;
+        }
+        return mySumCentralMoment4 * count.get() / Math.pow(sumCentralMoment2.get(), 2) - 3;
     }
 
     public double skewness() {
@@ -120,8 +124,12 @@ public final class LiveStats implements DoubleConsumer {
         // s3 / (c * (s2/c) * (s2/c)^(1/2))
         // s3 / (s2 * sqrt(s2/c))
         // s3 * sqrt(c/s2) / s2
+        final double mySumCentralMoment3 = sumCentralMoment3.get();
+        if (mySumCentralMoment3 == 0) {
+            return 0;
+        }
         final double mySumCentralMoment2 = sumCentralMoment2.get();
-        return sumCentralMoment3.get() * Math.sqrt(count.get() / mySumCentralMoment2) / mySumCentralMoment2;
+        return mySumCentralMoment3 * Math.sqrt(count.get() / mySumCentralMoment2) / mySumCentralMoment2;
     }
 
     @ThreadSafe
@@ -147,21 +155,21 @@ public final class LiveStats implements DoubleConsumer {
 
         public synchronized double minimum() {
             if (initializedMarkers < N_MARKERS) {
-                Arrays.sort(heights);
+                Arrays.sort(heights, 0, initializedMarkers);
             }
             return heights[0];
         }
 
         public synchronized double maximum() {
-            if (initializedMarkers != N_MARKERS) {
-                Arrays.sort(heights);
+            if (initializedMarkers < N_MARKERS) {
+                Arrays.sort(heights, 0, initializedMarkers);
             }
             return heights[initializedMarkers - 1];
         }
 
         public synchronized double quantile() {
-            if (initializedMarkers != N_MARKERS) {
-                Arrays.sort(heights); // Not fully initialized, probably not in order
+            if (initializedMarkers < N_MARKERS) {
+                Arrays.sort(heights, 0, initializedMarkers); // Not fully initialized, probably not in order
                 // make sure we don't overflow on percentile == 1 or underflow on percentile == 0
                 return heights[Math.min(Math.max(initializedMarkers - 1, 0), (int)(initializedMarkers * percentile))];
             }
