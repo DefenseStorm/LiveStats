@@ -1,6 +1,5 @@
 package io.praesid.livestats;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.AtomicDouble;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -8,8 +7,12 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BooleanSupplier;
+import java.util.function.DoubleUnaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.DoubleStream;
@@ -19,71 +22,71 @@ import static org.junit.Assert.assertEquals;
 
 public class LiveStatsTest {
     private static final Logger log = LogManager.getLogger();
-    private static final double[] TEST_TILES = {0.25,0.5,0.75};
+    private static final double[] TEST_TILES = {.25,.5,.75,.9,.99,.999,.9999};
     private static final int TEST_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 1, .005, 10, quantileMaxPes(TEST_TILES, .5));
+            new Stats("", 0, 0, 0, .0000001, 5, .02, 20, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
     private static final Stats knownMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 30, 5, 300, ImmutableMap.of(0.25, 5., 0.5, 20., 0.75, 20.));
+            new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 50));
     private static final Stats gaussianMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, 1, 50, quantileMaxPes(TEST_TILES, .1));
+            new Stats("", 0, 0, 0, .0000001, .2, 2, 500, quantileMaxPes(.2, .1, .1, .2, 1, 5, 20));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(TEST_TILES, 15.));
+            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(10, 20, 20, 10, .02, .02, .05));
     private static final Stats triangularMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(TEST_TILES, .2));
+            new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
     private static final Stats bimodalMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .01, 1, quantileMaxPes(TEST_TILES, .5));
+            new Stats("", 0, 0, 0, .0000001, .2, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
 
     @Test
     public void testKnown() {
         final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
                                10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
-        test("Test", TEST_TILES, test, knownMaxPes);
+        test("Test", Arrays.stream(test), knownMaxPes);
     }
 
     @Test
     public void testUniform() {
         final double[] ux = IntStream.range(0, TEST_COUNT).asDoubleStream().toArray();
         Collections.shuffle(Arrays.asList(ux), ThreadLocalRandom.current()); // Shuffles the underlying array
-        test("Uniform", TEST_TILES, ux, uniformMaxPes);
+        test("Uniform", Arrays.stream(ux), uniformMaxPes);
     }
 
     @Test
     public void testGaussian() {
-        final double[] gx = DoubleStream.generate(ThreadLocalRandom.current()::nextGaussian).limit(TEST_COUNT)
-                                        .toArray();
-        test("Gaussian", TEST_TILES, gx, gaussianMaxPes);
+        test("Gaussian", DoubleStream.generate(ThreadLocalRandom.current()::nextGaussian), gaussianMaxPes);
     }
 
     @Test
     public void testExpovar() {
-        final double[] ex = IntStream.range(0, TEST_COUNT).mapToDouble(i -> exponential(1.0 / 435)).toArray();
-        test("Expovar", TEST_TILES, ex, expovarMaxPes);
+        final double lambda = 1.0 / 435;
+        test("Expovar", ThreadLocalRandom.current().doubles().map(d -> Math.log(1. - d) / lambda), expovarMaxPes);
     }
 
     @Test
     public void testTriangular() {
-        final double[] tx = IntStream
-                .range(0, TEST_COUNT).mapToDouble(i -> triangular(-100 * TEST_COUNT, 100 * TEST_COUNT, 100)).toArray();
-        test("Triangular", TEST_TILES, tx, triangularMaxPes);
+        final DoubleStream tx = ThreadLocalRandom.current().doubles()
+                                                 .map(triangular(-100 * TEST_COUNT, 100 * TEST_COUNT, 100));
+        test("Triangular", tx, triangularMaxPes);
     }
 
     @Test
     public void testBimodal() {
-        final double[] bx = IntStream
-                .range(0, TEST_COUNT).mapToDouble(i -> bimodal(0, 1000, 500, 500, 1500, 1400)).toArray();
-        test("Bimodal", TEST_TILES, bx, bimodalMaxPes);
+        final Random r = ThreadLocalRandom.current();
+        final DoubleStream bx = r.doubles()
+                                 .map(bimodal(r::nextBoolean, triangular(0, 1000, 500), triangular(500, 1500, 1400)));
+        test("Bimodal", bx, bimodalMaxPes);
     }
 
-    private void test(final String name, final double[] tiles, final double[] data, final Stats maxPes) {
-        final LiveStats stats = new LiveStats(tiles);
+    private void test(final String name, final DoubleStream dataStream, final Stats maxPes) {
+        final double[] data = dataStream.limit(TEST_COUNT).toArray();
+        final LiveStats stats = new LiveStats(TEST_TILES);
 
         final long start = System.nanoTime();
         Arrays.stream(data).parallel().forEach(stats);
         final Stats live = new Stats(name, stats);
 
         final long mid = System.nanoTime();
-        final Stats real = calculateReal(tiles, data, name);
+        final Stats real = calculateReal(data, name);
 
         final long end = System.nanoTime();
 
@@ -93,7 +96,7 @@ public class LiveStatsTest {
         assertEquals("count", real.n, live.n);
         assertEquals("min", real.min, live.min, maxPes.min);
         assertEquals("max", real.max, live.max, maxPes.max);
-        for (double tile : tiles) {
+        for (double tile : TEST_TILES) {
             assertEquals("p" + tile + "%e",
                          0.,
                          100 * (live.quantiles.get(tile) - real.quantiles.get(tile)) / (real.max - real.min),
@@ -105,35 +108,31 @@ public class LiveStatsTest {
         assertEquals("kurtosis%e", 0., 100 * (live.kurtosis - real.kurtosis) / real.kurtosis, maxPes.kurtosis);
     }
 
-    private static double triangular(double low, double high, double mode) {
-        final double base = ThreadLocalRandom.current().nextDouble();
+    private static DoubleUnaryOperator triangular(double low, double high, double mode) {
         final double pivot = (mode - low) / (high - low);
-        if (base <= pivot) {
-            return low + Math.sqrt(base * (high - low) * (mode - low));
-        } else {
-            return high - Math.sqrt((1 - base) * (high - low) * (high - mode));
-        }
+        return base -> {
+            if (base <= pivot) {
+                return low + Math.sqrt(base * (high - low) * (mode - low));
+            } else {
+                return high - Math.sqrt((1 - base) * (high - low) * (high - mode));
+            }
+        };
     }
 
-    private static double bimodal(double low1, double high1, double mode1, double low2, double high2, double mode2) {
-        final boolean toss = ThreadLocalRandom.current().nextBoolean();
-        return toss ? triangular(low1, high1, mode1) : triangular(low2, high2, mode2);
+    private static DoubleUnaryOperator bimodal(final BooleanSupplier toss,
+                                               final DoubleUnaryOperator left, final DoubleUnaryOperator right) {
+        return base -> toss.getAsBoolean() ? left.applyAsDouble(base) : right.applyAsDouble(base);
     }
 
-    private static double exponential(double lambda) {
-        return Math.log(1 - ThreadLocalRandom.current().nextDouble()) / -lambda;
+    private static Map<Double, Double> quantileMaxPes(final double... maxPes) {
+        return IntStream.range(0, TEST_TILES.length)
+                        .collect(HashMap::new, (m, i) -> m.put(TEST_TILES[i], maxPes[i]), HashMap::putAll);
     }
 
-    private static Map<Double, Double> quantileMaxPes(final double[] tiles, final double maxPe) {
-        return Arrays.stream(tiles)
-                     .mapToObj(x -> x)
-                     .collect(Collectors.toMap(Function.identity(), ignored -> maxPe));
-    }
-
-    private static Stats calculateReal(final double[] tiles, final double[] data, final String name) {
+    private static Stats calculateReal(final double[] data, final String name) {
         Arrays.sort(data);
         final Map<Double, Double> quantiles = Arrays
-                .stream(tiles).mapToObj(x -> x)
+                .stream(TEST_TILES).mapToObj(x -> x)
                 .collect(Collectors.toMap(Function.identity(), x -> data[(int)(data.length * x)]));
 
         final double avg = Arrays.stream(data).parallel().sum() / data.length;
