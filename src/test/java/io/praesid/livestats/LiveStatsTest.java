@@ -23,7 +23,7 @@ import static org.junit.Assert.assertEquals;
 public class LiveStatsTest {
     private static final Logger log = LogManager.getLogger();
     private static final double[] TEST_TILES = {.25,.5,.75,.9,.99,.999,.9999};
-    private static final int TEST_COUNT = 10000; // Lots of thresholds need tuning if this is changed
+    private static final int SAMPLE_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
             new Stats("", 0, 0, 0, .0000001, 5, .02, 100, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
     private static final Stats knownMaxPes =
@@ -38,7 +38,7 @@ public class LiveStatsTest {
             new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
 
     @Test
-    public void testKnown() {
+    public void testKnown() { // Doesn't use SAMPLE_COUNT
         final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
                                10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
         test("Test", Arrays.stream(test), knownMaxPes);
@@ -46,7 +46,7 @@ public class LiveStatsTest {
 
     @Test
     public void testUniform() {
-        final double[] ux = IntStream.range(0, TEST_COUNT).asDoubleStream().toArray();
+        final double[] ux = IntStream.range(0, SAMPLE_COUNT).asDoubleStream().toArray();
         Collections.shuffle(Arrays.asList(ux), ThreadLocalRandom.current()); // Shuffles the underlying array
         test("Uniform", Arrays.stream(ux), uniformMaxPes);
     }
@@ -65,7 +65,7 @@ public class LiveStatsTest {
     @Test
     public void testTriangular() {
         final DoubleStream tx = ThreadLocalRandom.current().doubles()
-                                                 .map(triangular(-100 * TEST_COUNT, 100 * TEST_COUNT, 100));
+                                                 .map(triangular(-100 * SAMPLE_COUNT, 100 * SAMPLE_COUNT, 100));
         test("Triangular", tx, triangularMaxPes);
     }
 
@@ -78,7 +78,7 @@ public class LiveStatsTest {
     }
 
     private void test(final String name, final DoubleStream dataStream, final Stats maxPes) {
-        final double[] data = dataStream.limit(TEST_COUNT).toArray();
+        final double[] data = dataStream.limit(SAMPLE_COUNT).toArray();
         final LiveStats stats = new LiveStats(TEST_TILES);
 
         final long start = System.nanoTime();
@@ -90,8 +90,8 @@ public class LiveStatsTest {
 
         final long end = System.nanoTime();
 
-        log.info("live ({}ns/datum): {}", (mid - start) / TEST_COUNT, live);
-        log.info("real ({}ns/datum): {}", (end - mid) / TEST_COUNT, real);
+        log.info("live ({}ns/datum): {}", (mid - start) / SAMPLE_COUNT, live);
+        log.info("real ({}ns/datum): {}", (end - mid) / SAMPLE_COUNT, real);
         assertEquals("name", real.name, live.name);
         assertEquals("count", real.n, live.n);
         assertEquals("min", real.min, live.min, maxPes.min);
