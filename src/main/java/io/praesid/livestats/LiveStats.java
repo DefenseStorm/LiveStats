@@ -133,8 +133,8 @@ public final class LiveStats implements DoubleConsumer {
         private final double[] dn; // Immutable, how far the ideal positions move for each item
         private final double[] npos;
         private final int[] pos = {1, 2, 3, 4, 5};
-        private final double[] heights;
-        private int initialized;
+        private final double[] heights = new double[N_MARKERS];
+        private int initialized = 0;
         public final double p;
 
         /**
@@ -144,8 +144,6 @@ public final class LiveStats implements DoubleConsumer {
             this.p = p;
             dn = new double[]{p / 2, p, (1 + p) / 2, 1};
             npos = new double[]{1 + 2 * p, 1 + 4 * p, 3 + 2 * p, 5};
-            initialized = 0;
-            heights = new double[N_MARKERS];
         }
 
         public synchronized double minimum() {
