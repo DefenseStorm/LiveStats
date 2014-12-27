@@ -3,16 +3,13 @@ package io.praesid.livestats;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.AtomicDouble;
 import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @ThreadSafe
 @ToString
@@ -20,18 +17,21 @@ public final class DecayingLiveStats implements LiveStats {
 
     @GuardedBy("this")
     private double sum = 0;
-    private final AtomicDouble sumCentralMoment2 =  new AtomicDouble(0);
-    private final AtomicDouble sumCentralMoment3 = new AtomicDouble(0);
-    private final AtomicDouble sumCentralMoment4 = new AtomicDouble(0);
-    private final AtomicInteger count = new AtomicInteger(0);
+    @GuardedBy("this")
+    private double sumCentralMoment2 =  0;
+    @GuardedBy("this")
+    private double sumCentralMoment3 = 0;
+    @GuardedBy("this")
+    private double sumCentralMoment4 = 0;
+    private int count = 0;
     @GuardedBy("this")
     private double decayedCount = 0;
-    private final ImmutableList<Quantile> quantiles;
-    private final long startMillis = Instant.now().toEpochMilli();
-    private final double decayMultiplier;
-    private final long decayPeriodMillis;
     @GuardedBy("this")
     private int decayCount = 0;
+    private final ImmutableList<Quantile> quantiles;
+    private final long startNanos = System.nanoTime();
+    private final double decayMultiplier;
+    private final long decayPeriodNanos;
 
     /**
      * Constructs a LiveStats object
@@ -45,7 +45,7 @@ public final class DecayingLiveStats implements LiveStats {
         }
         this.quantiles = tilesBuilder.build();
         decayMultiplier = 1 - decayRatio;
-        decayPeriodMillis = decayPeriod.toMillis();
+        decayPeriodNanos = decayPeriod.toNanos();
     }
 
     /**
@@ -64,40 +64,39 @@ public final class DecayingLiveStats implements LiveStats {
      * @param item the value to add
      */
     public void add(double item) {
-        count.incrementAndGet();
-
-        final int expectedDecays = (int)((System.currentTimeMillis() - startMillis) / decayPeriodMillis);
-        final double delta;
+        final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayPeriodNanos);
+        final double myDecayMultiplier;
         synchronized (this) {
-            for (; expectedDecays > decayCount; decayCount++) {
-                sum *= decayMultiplier;
-                decayedCount *= decayMultiplier;
-
-                decay(sumCentralMoment2);
-                decay(sumCentralMoment3);
-                decay(sumCentralMoment4);
-
-                for (final Quantile quantile : quantiles) {
-                    quantile.decay(decayMultiplier);
-                }
+            if (expectedDecays > decayCount) {
+                myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
+                sum *= myDecayMultiplier;
+                decayedCount *= myDecayMultiplier;
+                sumCentralMoment2 *= myDecayMultiplier;
+                sumCentralMoment3 *= myDecayMultiplier;
+                sumCentralMoment4 *= myDecayMultiplier;
+                decayCount = expectedDecays;
+            } else {
+                myDecayMultiplier = 1;
             }
+            count++;
             decayedCount++;
             sum += item;
-            delta = item - sum / decayedCount;
+            final double delta = item - sum / decayedCount;
+
+            final double delta2 = delta * delta;
+            sumCentralMoment2 += delta2;
+
+            final double delta3 = delta2 * delta;
+            sumCentralMoment3 += delta3;
+
+            final double delta4 = delta3 * delta;
+            sumCentralMoment4 += delta4;
         }
 
         for (final Quantile quantile : quantiles) {
-            quantile.add(item);
+            quantile.add(myDecayMultiplier, item);
         }
 
-        final double delta2 = delta * delta;
-        sumCentralMoment2.addAndGet(delta2);
-
-        final double delta3 = delta2 * delta;
-        sumCentralMoment3.addAndGet(delta3);
-
-        final double delta4 = delta3 * delta;
-        sumCentralMoment4.addAndGet(delta4);
     }
 
     /**
@@ -123,52 +122,42 @@ public final class DecayingLiveStats implements LiveStats {
         return quantiles.get(0).minimum();
     }
 
-    public int num() {
-        return count.get();
+    public synchronized int num() {
+        return count;
+    }
+
+    public synchronized double decayedNum() {
+        return decayedCount;
     }
 
     public synchronized double variance() {
-        return sumCentralMoment2.get() / decayedCount;
+        return sumCentralMoment2 / decayedCount;
     }
 
-    public double kurtosis() {
+    public synchronized double kurtosis() {
         // u4 / u2^2 - 3
         // (s4/c) / (s2/c)^2 - 3
         // s4 / (c * (s2/c)^2) - 3
         // s4 / (c * (s2/c) * (s2/c)) - 3
         // s4 / (s2^2 / c) - 3
         // s4 * c / s2^2 - 3
-        final double mySumCentralMoment4 = sumCentralMoment4.get();
-        if (mySumCentralMoment4 == 0) {
+        if (sumCentralMoment4 == 0) {
             return 0;
         }
-        synchronized(this) {
-            return mySumCentralMoment4 * decayedCount / Math.pow(sumCentralMoment2.get(), 2) - 3;
-        }
+        return sumCentralMoment4 * decayedCount / Math.pow(sumCentralMoment2, 2) - 3;
     }
 
-    public double skewness() {
+    public synchronized double skewness() {
         // u3 / u2^(3/2)
         // (s3/c) / (s2/c)^(3/2)
         // s3 / (c * (s2/c)^(3/2))
         // s3 / (c * (s2/c) * (s2/c)^(1/2))
         // s3 / (s2 * sqrt(s2/c))
         // s3 * sqrt(c/s2) / s2
-        final double mySumCentralMoment3 = sumCentralMoment3.get();
-        if (mySumCentralMoment3 == 0) {
+        if (sumCentralMoment3 == 0) {
             return 0;
         }
-        final double mySumCentralMoment2 = sumCentralMoment2.get();
-        synchronized(this) {
-            return mySumCentralMoment3 * Math.sqrt(decayedCount / mySumCentralMoment2) / mySumCentralMoment2;
-        }
-    }
-
-    private void decay(final AtomicDouble target) {
-        double oldValue;
-        do {
-            oldValue = target.get();
-        } while (!target.compareAndSet(oldValue, oldValue * decayMultiplier));
+        return sumCentralMoment3 * Math.sqrt(decayedCount / sumCentralMoment2) / sumCentralMoment2;
     }
 
     @ThreadSafe
@@ -176,6 +165,7 @@ public final class DecayingLiveStats implements LiveStats {
     private static final class Quantile {
         private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
+        // length of positionDeltas and idealPositions is N_MARKERS-1 because the lowest idealPosition is always 1
         private final double[] positionDeltas; // Immutable, how far the ideal positions move for each item
         private final double[] idealPositions;
         private final double[] positions = {1, 2, 3, 4, 5};
@@ -218,7 +208,9 @@ public final class DecayingLiveStats implements LiveStats {
         /**
          * Adds another datum
          */
-        public synchronized void add(double item) {
+        public synchronized void add(final double decayMultiplier, final double item) {
+            decay(decayMultiplier);
+
             if (initializedMarkers < N_MARKERS) {
                 heights[initializedMarkers] = item;
                 initializedMarkers++;
@@ -243,15 +235,6 @@ public final class DecayingLiveStats implements LiveStats {
             }
 
             adjust();
-        }
-
-        public synchronized void decay(double multiplier) {
-            for (int i = 0; i < idealPositions.length; i++) {
-                idealPositions[i] *= multiplier;
-            }
-            for (int i = 0; i < positions.length; i++) {
-                positions[i] *= multiplier;
-            }
         }
 
         private void adjust() {
@@ -304,5 +287,14 @@ public final class DecayingLiveStats implements LiveStats {
             return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
         }
 
+        private void decay(final double decayMultiplier) {
+            if (decayMultiplier < 1) {
+                // TODO: figure out how to decay heights
+                for (int i = 0; i < idealPositions.length; i++) {
+                    idealPositions[i] *= decayMultiplier;
+                    positions[i+1] *= decayMultiplier;
+                }
+            }
+        }
     }
 }
