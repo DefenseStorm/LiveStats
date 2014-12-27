@@ -37,7 +37,7 @@ public class LiveStatsTest {
     private static final Stats triangularMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
     private static final Stats bimodalMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .2, .1, .2, .5, 1));
+            new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .5, .1, .2, .5, 1));
 
     @Test
     public void testOnePoint() { // Doesn't use SAMPLE_COUNT
