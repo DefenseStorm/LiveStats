@@ -33,7 +33,7 @@ public class LiveStatsTest {
     private static final Stats gaussianMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, 2, 500, quantileMaxPes(.2, .1, .1, .2, 1, 5, 20));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(10, 20, 20, 10, .05, .02, .05));
+            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(10, 20, 20, 10, .5, .02, .05));
     private static final Stats triangularMaxPes =
             new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
     private static final Stats bimodalMaxPes =
