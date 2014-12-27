@@ -5,6 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,24 +21,24 @@ import java.util.stream.IntStream;
 
 import static org.junit.Assert.assertEquals;
 
-public class LiveStatsTest {
+public class DecayingLiveStatsTest {
     private static final Logger log = LogManager.getLogger();
     private static final double[] TEST_TILES = {.25,.5,.75,.9,.99,.999,.9999};
     private static final int SAMPLE_COUNT = 10000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 0, 0, .0000001, 5, .02, 100, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
+            new Stats("", 0, 0, 0, .5, 5, .02, 100, quantileMaxPes(.2, .1, .05, .02, .01, .01, .01));
     private static final Stats oneMaxPes =
             new Stats("", 0, 0, 0, 0, 0, 0, 0, quantileMaxPes(0, 0, 0, 0, 0, 0, 0));
     private static final Stats knownMaxPes =
             new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 100));
     private static final Stats gaussianMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, 2, 500, quantileMaxPes(.2, .1, .1, .2, 1, 5, 20));
+            new Stats("", 0, 0, 0, 50, .5, 2, 500, quantileMaxPes(.2, .1, .1, .2, 1, 5, 20));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .05, 200, quantileMaxPes(10, 20, 20, 10, .5, .02, .05));
+            new Stats("", 0, 0, 0, 5, 2, .05, 200, quantileMaxPes(10, 20, 20, 10, .5, .02, .05));
     private static final Stats triangularMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
+            new Stats("", 0, 0, 0, 50, .2, .00001, 2, quantileMaxPes(.2, .5, .2, .2, .5, 1, 2));
     private static final Stats bimodalMaxPes =
-            new Stats("", 0, 0, 0, .0000001, .5, .01, 1, quantileMaxPes(.5, .2, .5, .1, .2, .5, 1));
+            new Stats("", 0, 0, 0, .02, .5, .01, 1, quantileMaxPes(.5, .2, .5, .1, .2, .5, 1));
 
     @Test
     public void testOnePoint() { // Doesn't use SAMPLE_COUNT
@@ -86,7 +87,7 @@ public class LiveStatsTest {
 
     private void test(final String name, final DoubleStream dataStream, final Stats maxPes) {
         final double[] data = dataStream.limit(SAMPLE_COUNT).toArray();
-        final LiveStats stats = new CompleteLiveStats(TEST_TILES);
+        final DecayingLiveStats stats = new DecayingLiveStats(.05, Duration.ofMillis(5), TEST_TILES);
 
         final long start = System.nanoTime();
         Arrays.stream(data).parallel().forEach(stats);
