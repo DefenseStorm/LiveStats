@@ -16,6 +16,10 @@ import java.util.Map;
 public final class DecayingLiveStats implements LiveStats {
 
     @GuardedBy("this")
+    private double min = Double.POSITIVE_INFINITY;
+    @GuardedBy("this")
+    private double max = Double.NEGATIVE_INFINITY;
+    @GuardedBy("this")
     private double sum = 0;
     @GuardedBy("this")
     private double sumCentralMoment2 =  0;
@@ -48,6 +52,28 @@ public final class DecayingLiveStats implements LiveStats {
         decayPeriodNanos = decayPeriod.toNanos();
     }
 
+    public void decay() {
+        final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayPeriodNanos);
+        final double myDecayMultiplier;
+        synchronized (this) {
+            if (expectedDecays > decayCount) {
+                myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
+                sum *= myDecayMultiplier;
+                decayedCount *= myDecayMultiplier;
+                sumCentralMoment2 *= myDecayMultiplier;
+                sumCentralMoment3 *= myDecayMultiplier;
+                sumCentralMoment4 *= myDecayMultiplier;
+                decayCount = expectedDecays;
+            } else {
+                myDecayMultiplier = 1;
+            }
+        }
+
+        for (final Quantile quantile : quantiles) {
+            quantile.decay(myDecayMultiplier);
+        }
+    }
+
     /**
      * Adds another datum
      *
@@ -64,19 +90,14 @@ public final class DecayingLiveStats implements LiveStats {
      * @param item the value to add
      */
     public void add(double item) {
-        final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayPeriodNanos);
-        final double myDecayMultiplier;
-        synchronized (this) {
-            if (expectedDecays > decayCount) {
-                myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
-                sum *= myDecayMultiplier;
-                decayedCount *= myDecayMultiplier;
-                sumCentralMoment2 *= myDecayMultiplier;
-                sumCentralMoment3 *= myDecayMultiplier;
-                sumCentralMoment4 *= myDecayMultiplier;
-                decayCount = expectedDecays;
-            } else {
-                myDecayMultiplier = 1;
+        decay();
+
+        synchronized(this) {
+            if (item < min) {
+                min = item;
+            }
+            if (item > max) {
+                max = item;
             }
             count++;
             decayedCount++;
@@ -94,9 +115,8 @@ public final class DecayingLiveStats implements LiveStats {
         }
 
         for (final Quantile quantile : quantiles) {
-            quantile.add(myDecayMultiplier, item);
+            quantile.add(item);
         }
-
     }
 
     /**
@@ -110,16 +130,24 @@ public final class DecayingLiveStats implements LiveStats {
         return builder.build();
     }
 
-    public double maximum() {
-        return quantiles.get(0).maximum();
+    public synchronized double maximum() {
+        return max;
+    }
+
+    public double decayedMaximum() {
+        return quantiles.stream().mapToDouble(Quantile::maximum).max().getAsDouble();
     }
 
     public synchronized double mean() {
         return sum / decayedCount;
     }
 
-    public double minimum() {
-        return quantiles.get(0).minimum();
+    public synchronized double minimum() {
+        return min;
+    }
+
+    public double decayedMinimum() {
+        return quantiles.stream().mapToDouble(Quantile::minimum).min().getAsDouble();
     }
 
     public synchronized int num() {
@@ -128,6 +156,10 @@ public final class DecayingLiveStats implements LiveStats {
 
     public synchronized double decayedNum() {
         return decayedCount;
+    }
+
+    public synchronized int decayCount() {
+        return decayCount;
     }
 
     public synchronized double variance() {
@@ -205,12 +237,35 @@ public final class DecayingLiveStats implements LiveStats {
             return heights[2];
         }
 
+        public synchronized void decay(final double decayMultiplier) {
+            if (decayMultiplier != 1 && initializedMarkers == N_MARKERS) {
+                for (int i = 0; i < idealPositions.length; i++) {
+                    idealPositions[i] *= decayMultiplier;
+                    positions[i+1] *= decayMultiplier;
+                }
+                // Move max / min toward eachother according to decayMultiplier
+                final double rise = heights[N_MARKERS - 1] - heights[0];
+                final double distance = (1 - decayMultiplier) * rise;
+                heights[0] += distance / 2;
+                heights[N_MARKERS - 1] -= distance / 2;
+                // shove other markers inward if needed
+                for (int i = 0; i < N_MARKERS / 2; i++) {
+                    if (heights[i] >= heights[i + 1]) {
+                        heights[i+1] += Math.ulp(heights[i+1]);
+                    }
+                }
+                for (int i = N_MARKERS - 1; i > N_MARKERS / 2; i--) {
+                    if (heights[i] <= heights[i - 1]) {
+                        heights[i - 1] -= Math.ulp(heights[i-1]);
+                    }
+                }
+            }
+        }
+
         /**
          * Adds another datum
          */
-        public synchronized void add(final double decayMultiplier, final double item) {
-            decay(decayMultiplier);
-
+        public synchronized void add(final double item) {
             if (initializedMarkers < N_MARKERS) {
                 heights[initializedMarkers] = item;
                 initializedMarkers++;
@@ -222,7 +277,8 @@ public final class DecayingLiveStats implements LiveStats {
 
             if (item > heights[N_MARKERS - 1]) {
                 heights[N_MARKERS - 1] = item; // Marker N_MARKERS-1 is max
-            } else if (item < heights[0]) {
+            }
+            if (heights[0] > item) {
                 heights[0] = item; // Marker 0 is min
             }
             positions[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
@@ -240,7 +296,6 @@ public final class DecayingLiveStats implements LiveStats {
         private void adjust() {
             for (int i = 1; i < N_MARKERS - 1; i++) {
                 final double position = positions[i];
-
                 final double positionDelta = idealPositions[i - 1] - position;
 
                 if ((positionDelta >= 1 && positions[i + 1] > position + 1) ||
@@ -285,16 +340,6 @@ public final class DecayingLiveStats implements LiveStats {
             final double lowerHalf = belowScale * (height - heightBelow);
             final double upperHalf = aboveScale * (heightAbove - height);
             return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
-        }
-
-        private void decay(final double decayMultiplier) {
-            if (decayMultiplier < 1) {
-                // TODO: figure out how to decay heights
-                for (int i = 0; i < idealPositions.length; i++) {
-                    idealPositions[i] *= decayMultiplier;
-                    positions[i+1] *= decayMultiplier;
-                }
-            }
         }
     }
 }

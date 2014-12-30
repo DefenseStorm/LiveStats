@@ -6,7 +6,7 @@ import lombok.ToString;
 import java.util.Map;
 
 @ToString
-public final class Stats {
+public class Stats {
     public final String name;
     public final int n;
     public final double min;
