@@ -22,7 +22,11 @@ public final class LiveStats implements DoubleConsumer {
     @GuardedBy("lock")
     private double min = Double.POSITIVE_INFINITY;
     @GuardedBy("lock")
+    private double decayedMin = Double.POSITIVE_INFINITY;
+    @GuardedBy("lock")
     private double max = Double.NEGATIVE_INFINITY;
+    @GuardedBy("lock")
+    private double decayedMax = Double.NEGATIVE_INFINITY;
     @GuardedBy("lock")
     private double sum = 0;
     @GuardedBy("lock")
@@ -88,6 +92,9 @@ public final class LiveStats implements DoubleConsumer {
         final long writeStamp = lock.writeLock();
         try {
             myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
+            final double minMaxDecay = (decayedMax - decayedMin) * (myDecayMultiplier / 2);
+            decayedMin += minMaxDecay;
+            decayedMax -= minMaxDecay;
             sum *= myDecayMultiplier;
             decayedCount *= myDecayMultiplier;
             sumCentralMoment2 *= myDecayMultiplier;
@@ -121,14 +128,15 @@ public final class LiveStats implements DoubleConsumer {
     public void add(double item) {
         decay();
 
+        final double targetMin;
+        final double targetMax;
         final long stamp = lock.writeLock();
         try {
-            if (item < min) {
-                min = item;
-            }
-            if (item > max) {
-                max = item;
-            }
+            min = Math.min(min, item);
+            targetMin = decayedMin = Math.min(decayedMin, item);
+            max = Math.max(max, item);
+            targetMax = decayedMax = Math.max(decayedMax, item);
+
             count++;
             decayedCount++;
             sum += item;
@@ -147,7 +155,7 @@ public final class LiveStats implements DoubleConsumer {
         }
 
         for (final Quantile quantile : quantiles) {
-            quantile.add(item);
+            quantile.add(item, targetMin, targetMax);
         }
     }
 
@@ -174,7 +182,14 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double decayedMaximum() {
-        return quantiles.stream().mapToDouble(Quantile::maximum).max().getAsDouble();
+        long stamp = lock.tryOptimisticRead();
+        double decayedMaximum = decayedMax;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            decayedMaximum = decayedMax;
+            lock.unlock(stamp);
+        }
+        return decayedMaximum;
     }
 
     public double mean() {
@@ -200,7 +215,14 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double decayedMinimum() {
-        return quantiles.stream().mapToDouble(Quantile::minimum).min().getAsDouble();
+        long stamp = lock.tryOptimisticRead();
+        double decayedMinimum = decayedMin;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            decayedMinimum = decayedMin;
+            lock.unlock(stamp);
+        }
+        return decayedMinimum;
     }
 
     public int num() {
@@ -324,30 +346,6 @@ public final class LiveStats implements DoubleConsumer {
             idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
         }
 
-        public double minimum() {
-            sortIfNeeded();
-            final long optimisticStamp = lock.tryOptimisticRead();
-            double minimum = heights[0];
-            if (!lock.validate(optimisticStamp)) {
-                final long readStamp = lock.readLock();
-                minimum = heights[0];
-                lock.unlock(readStamp);
-            }
-            return minimum;
-        }
-
-        public double maximum() {
-            sortIfNeeded();
-            final long optimisticStamp = lock.tryOptimisticRead();
-            double maximum = heights[initializedMarkers - 1];
-            if (!lock.validate(optimisticStamp)) {
-                final long readStamp = lock.readLock();
-                maximum = heights[initializedMarkers - 1];
-                lock.unlock(readStamp);
-            }
-            return maximum;
-        }
-
         public double quantile() {
             sortIfNeeded();
             final long optimisticStamp = lock.tryOptimisticRead();
@@ -370,22 +368,6 @@ public final class LiveStats implements DoubleConsumer {
                     idealPositions[i] *= decayMultiplier;
                     positions[i + 1] *= decayMultiplier;
                 }
-                // Move max / min toward eachother according to decayMultiplier
-                final double rise = heights[N_MARKERS - 1] - heights[0];
-                final double distance = (1 - decayMultiplier) * rise;
-                heights[0] += distance / 2;
-                heights[N_MARKERS - 1] -= distance / 2;
-                // shove other markers inward if needed
-                for (int i = 0; i < N_MARKERS / 2; i++) {
-                    if (heights[i] >= heights[i + 1]) {
-                        heights[i+1] += Math.ulp(heights[i+1]);
-                    }
-                }
-                for (int i = N_MARKERS - 1; i > N_MARKERS / 2; i--) {
-                    if (heights[i] <= heights[i - 1]) {
-                        heights[i - 1] -= Math.ulp(heights[i-1]);
-                    }
-                }
             }
             lock.unlock(writeStamp);
         }
@@ -393,7 +375,7 @@ public final class LiveStats implements DoubleConsumer {
         /**
          * Adds another datum
          */
-        public void add(final double item) {
+        public void add(final double item, final double targetMin, final double targetMax) {
             final long writeStamp = lock.writeLock();
             try {
                 if (initializedMarkers < N_MARKERS) {
@@ -407,11 +389,15 @@ public final class LiveStats implements DoubleConsumer {
                     return;
                 }
 
-                if (item > heights[N_MARKERS - 1]) {
-                    heights[N_MARKERS - 1] = item; // Marker N_MARKERS-1 is max
+                if (targetMax > heights[N_MARKERS - 2]) {
+                    heights[N_MARKERS - 1] = targetMax;
+                } else {
+                    heights[N_MARKERS - 1] = heights[N_MARKERS - 2] + Math.ulp(heights[N_MARKERS - 2]);
                 }
-                if (heights[0] > item) {
-                    heights[0] = item; // Marker 0 is min
+                if (targetMin < heights[1]) {
+                    heights[0] = targetMin;
+                } else {
+                    heights[0] = heights[1] - Math.ulp(heights[1]);
                 }
                 positions[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
                 for (int i = N_MARKERS - 2; heights[i] > item; i--) { // Increment all other markers > item

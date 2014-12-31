@@ -35,7 +35,7 @@ public class DecayingLiveStatsTest extends LiveStatsTestBase {
     private static final Stats triangularMaxPes =
             new Stats("", 0, 20, 20, .2, 1, .00001, 2, quantileMaxPes(.2, .5, .5, .5, .5, 1, 2));
     private static final Stats bimodalThenTriangularMaxPes =
-            new Stats("", 0, 50, 50, .2, 5, .05, 20, quantileMaxPes(.5, .5, .5, .5, 10, 1, 20));
+            new Stats("", 0, 50, 50, .2, 5, .05, 20, quantileMaxPes(.2, .2, .5, .5, .5, 1, 3));
 
     @Test
     public void testOnePoint() { // Doesn't use SAMPLE_COUNT
