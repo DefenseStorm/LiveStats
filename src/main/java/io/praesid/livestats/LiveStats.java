@@ -92,9 +92,11 @@ public final class LiveStats implements DoubleConsumer {
         final long writeStamp = lock.writeLock();
         try {
             myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
-            final double minMaxDecay = (decayedMax - decayedMin) * (myDecayMultiplier / 2);
-            decayedMin += minMaxDecay;
-            decayedMax -= minMaxDecay;
+            if (count != 0) { // These turn into Double.NaN if decay happens while they're infinite
+                final double minMaxDecay = (decayedMax - decayedMin) * (myDecayMultiplier / 2);
+                decayedMin += minMaxDecay;
+                decayedMax -= minMaxDecay;
+            }
             sum *= myDecayMultiplier;
             decayedCount *= myDecayMultiplier;
             sumCentralMoment2 *= myDecayMultiplier;
