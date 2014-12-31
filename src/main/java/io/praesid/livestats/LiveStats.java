@@ -247,7 +247,7 @@ public final class LiveStats implements DoubleConsumer {
         return variance;
     }
 
-    public synchronized double kurtosis() {
+    public double kurtosis() {
         long stamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
         double mySumCentralMoment4 = sumCentralMoment4;
@@ -271,7 +271,7 @@ public final class LiveStats implements DoubleConsumer {
         return mySumCentralMoment4 * myDecayedCount / Math.pow(mySumCentralMoment2, 2) - 3;
     }
 
-    public synchronized double skewness() {
+    public double skewness() {
         long stamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
         double mySumCentralMoment3 = sumCentralMoment3;
