@@ -368,7 +368,7 @@ public final class LiveStats implements DoubleConsumer {
             if (initializedMarkers == N_MARKERS) {
                 for (int i = 0; i < idealPositions.length; i++) {
                     idealPositions[i] *= decayMultiplier;
-                    positions[i+1] *= decayMultiplier;
+                    positions[i + 1] *= decayMultiplier;
                 }
                 // Move max / min toward eachother according to decayMultiplier
                 final double rise = heights[N_MARKERS - 1] - heights[0];
