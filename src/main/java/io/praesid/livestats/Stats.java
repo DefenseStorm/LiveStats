@@ -9,7 +9,7 @@ import java.util.Map;
 public class Stats {
     public final String name;
     public final int decays;
-    public final int n;
+    public final long n;
     public final double decayedN;
     public final double min;
     public final double decayedMin;
@@ -37,7 +37,7 @@ public class Stats {
         decays = stats.decayCount();
     }
 
-    public Stats(final String name, final int n, final double min, final double max,
+    public Stats(final String name, final long n, final double min, final double max,
                  final double mean, final double variance,
                  final double skewness, final double kurtosis,
                  final Map<Double, Double> quantiles) {

@@ -36,7 +36,7 @@ public final class LiveStats implements DoubleConsumer {
     @GuardedBy("lock")
     private double sumCentralMoment4 = 0;
     @GuardedBy("lock")
-    private int count = 0;
+    private long count = 0;
     @GuardedBy("lock")
     private double decayedCount = 0;
     @GuardedBy("lock")
@@ -227,9 +227,9 @@ public final class LiveStats implements DoubleConsumer {
         return decayedMinimum;
     }
 
-    public int num() {
+    public long num() {
         final long optimisticStamp = lock.tryOptimisticRead();
-        int num = count;
+        long num = count;
         if (!lock.validate(optimisticStamp)) {
             final long readStamp = lock.readLock();
             num = count;
