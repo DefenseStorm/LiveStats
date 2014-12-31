@@ -10,28 +10,33 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.locks.StampedLock;
 
 @ThreadSafe
 @ToString
 public final class DecayingLiveStats implements LiveStats {
 
-    @GuardedBy("this")
+    private final StampedLock lock = new StampedLock();
+
+    @GuardedBy("lock")
     private double min = Double.POSITIVE_INFINITY;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double max = Double.NEGATIVE_INFINITY;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double sum = 0;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double sumCentralMoment2 =  0;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double sumCentralMoment3 = 0;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double sumCentralMoment4 = 0;
+    @GuardedBy("lock")
     private int count = 0;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private double decayedCount = 0;
-    @GuardedBy("this")
+    @GuardedBy("lock")
     private int decayCount = 0;
+
     private final ImmutableList<Quantile> quantiles;
     private final long startNanos = System.nanoTime();
     private final double decayMultiplier;
@@ -54,19 +59,28 @@ public final class DecayingLiveStats implements LiveStats {
 
     public void decay() {
         final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayPeriodNanos);
+        final long optimisticStamp = lock.tryOptimisticRead();
+        int myDecayCount = decayCount;
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
+            myDecayCount = decayCount;
+            lock.unlock(readStamp);
+        }
+        if (expectedDecays == myDecayCount) {
+            return;
+        }
         final double myDecayMultiplier;
-        synchronized (this) {
-            if (expectedDecays > decayCount) {
-                myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
-                sum *= myDecayMultiplier;
-                decayedCount *= myDecayMultiplier;
-                sumCentralMoment2 *= myDecayMultiplier;
-                sumCentralMoment3 *= myDecayMultiplier;
-                sumCentralMoment4 *= myDecayMultiplier;
-                decayCount = expectedDecays;
-            } else {
-                myDecayMultiplier = 1;
-            }
+        final long writeStamp = lock.writeLock();
+        try {
+            myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
+            sum *= myDecayMultiplier;
+            decayedCount *= myDecayMultiplier;
+            sumCentralMoment2 *= myDecayMultiplier;
+            sumCentralMoment3 *= myDecayMultiplier;
+            sumCentralMoment4 *= myDecayMultiplier;
+            decayCount = expectedDecays;
+        } finally {
+            lock.unlock(writeStamp);
         }
 
         for (final Quantile quantile : quantiles) {
@@ -92,7 +106,8 @@ public final class DecayingLiveStats implements LiveStats {
     public void add(double item) {
         decay();
 
-        synchronized(this) {
+        final long stamp = lock.writeLock();
+        try {
             if (item < min) {
                 min = item;
             }
@@ -112,6 +127,8 @@ public final class DecayingLiveStats implements LiveStats {
 
             final double delta4 = delta3 * delta;
             sumCentralMoment4 += delta4;
+        } finally {
+            lock.unlock(stamp);
         }
 
         for (final Quantile quantile : quantiles) {
@@ -130,66 +147,137 @@ public final class DecayingLiveStats implements LiveStats {
         return builder.build();
     }
 
-    public synchronized double maximum() {
-        return max;
+    public double maximum() {
+        long stamp = lock.tryOptimisticRead();
+        double maximum = max;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            maximum = max;
+            lock.unlock(stamp);
+        }
+        return maximum;
     }
 
     public double decayedMaximum() {
         return quantiles.stream().mapToDouble(Quantile::maximum).max().getAsDouble();
     }
 
-    public synchronized double mean() {
-        return sum / decayedCount;
+    public double mean() {
+        long stamp = lock.tryOptimisticRead();
+        double mean = sum / decayedCount;
+        if (!lock.validate(stamp)) {
+            lock.readLock();
+            mean = sum / decayedCount;
+            lock.unlock(stamp);
+        }
+        return mean;
     }
 
-    public synchronized double minimum() {
-        return min;
+    public double minimum() {
+        long stamp = lock.tryOptimisticRead();
+        double minimum = min;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            minimum = min;
+            lock.unlock(stamp);
+        }
+        return minimum;
     }
 
     public double decayedMinimum() {
         return quantiles.stream().mapToDouble(Quantile::minimum).min().getAsDouble();
     }
 
-    public synchronized int num() {
-        return count;
+    public int num() {
+        long stamp = lock.tryOptimisticRead();
+        int num = count;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            num = count;
+            lock.unlock(stamp);
+        }
+        return num;
     }
 
-    public synchronized double decayedNum() {
-        return decayedCount;
+    public double decayedNum() {
+        long stamp = lock.tryOptimisticRead();
+        double decayedNum = decayedCount;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            decayedNum = decayedCount;
+            lock.unlock(stamp);
+        }
+        return decayedNum;
     }
 
-    public synchronized int decayCount() {
-        return decayCount;
+    public int decayCount() {
+        long stamp = lock.tryOptimisticRead();
+        int myDecayCount = decayCount;
+        if (!lock.validate(stamp)) {
+            stamp = lock.readLock();
+            myDecayCount = decayCount;
+            lock.unlock(stamp);
+        }
+        return myDecayCount;
     }
 
-    public synchronized double variance() {
-        return sumCentralMoment2 / decayedCount;
+    public double variance() {
+        long stamp = lock.tryOptimisticRead();
+        double variance = sumCentralMoment2 / decayedCount;
+        if (!lock.validate(stamp)) {
+            lock.readLock();
+            variance = sumCentralMoment2 / decayedCount;
+            lock.unlock(stamp);
+        }
+        return variance;
     }
 
     public synchronized double kurtosis() {
+        long stamp = lock.tryOptimisticRead();
+        double mySumCentralMoment2 = sumCentralMoment2;
+        double mySumCentralMoment4 = sumCentralMoment4;
+        double myDecayedCount = decayedCount;
+        if (!lock.validate(stamp)) {
+            lock.readLock();
+            mySumCentralMoment2 = sumCentralMoment2;
+            mySumCentralMoment4 = sumCentralMoment4;
+            myDecayedCount = decayedCount;
+            lock.unlock(stamp);
+        }
         // u4 / u2^2 - 3
         // (s4/c) / (s2/c)^2 - 3
         // s4 / (c * (s2/c)^2) - 3
         // s4 / (c * (s2/c) * (s2/c)) - 3
         // s4 / (s2^2 / c) - 3
         // s4 * c / s2^2 - 3
-        if (sumCentralMoment4 == 0) {
+        if (mySumCentralMoment4 == 0) {
             return 0;
         }
-        return sumCentralMoment4 * decayedCount / Math.pow(sumCentralMoment2, 2) - 3;
+        return mySumCentralMoment4 * myDecayedCount / Math.pow(mySumCentralMoment2, 2) - 3;
     }
 
     public synchronized double skewness() {
+        long stamp = lock.tryOptimisticRead();
+        double mySumCentralMoment2 = sumCentralMoment2;
+        double mySumCentralMoment3 = sumCentralMoment3;
+        double myDecayedCount = decayedCount;
+        if (!lock.validate(stamp)) {
+            lock.readLock();
+            mySumCentralMoment2 = sumCentralMoment2;
+            mySumCentralMoment3 = sumCentralMoment3;
+            myDecayedCount = decayedCount;
+            lock.unlock(stamp);
+        }
         // u3 / u2^(3/2)
         // (s3/c) / (s2/c)^(3/2)
         // s3 / (c * (s2/c)^(3/2))
         // s3 / (c * (s2/c) * (s2/c)^(1/2))
         // s3 / (s2 * sqrt(s2/c))
         // s3 * sqrt(c/s2) / s2
-        if (sumCentralMoment3 == 0) {
+        if (mySumCentralMoment3 == 0) {
             return 0;
         }
-        return sumCentralMoment3 * Math.sqrt(decayedCount / sumCentralMoment2) / sumCentralMoment2;
+        return mySumCentralMoment3 * Math.sqrt(myDecayedCount / mySumCentralMoment2) / mySumCentralMoment2;
     }
 
     @ThreadSafe
@@ -230,7 +318,7 @@ public final class DecayingLiveStats implements LiveStats {
 
         public synchronized double quantile() {
             if (initializedMarkers < N_MARKERS) {
-                Arrays.sort(heights, 0, initializedMarkers); // Not fully initialized, probably not in order
+                Arrays.sort(heights, 0, initializedMarkers);
                 // make sure we don't overflow on percentile == 1 or underflow on percentile == 0
                 return heights[Math.min(Math.max(initializedMarkers - 1, 0), (int)(initializedMarkers * percentile))];
             }
