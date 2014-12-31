@@ -78,7 +78,7 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
 
     private void test(final String name, final DoubleStream dataStream, final Stats maxPes) {
         final double[] data = dataStream.limit(SAMPLE_COUNT).toArray();
-        final LiveStats stats = new CompleteLiveStats(TEST_TILES);
+        final LiveStats stats = new LiveStats(TEST_TILES);
 
         final long start = System.nanoTime();
         Arrays.stream(data).parallel().forEach(stats);

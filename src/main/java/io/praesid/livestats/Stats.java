@@ -8,9 +8,13 @@ import java.util.Map;
 @ToString
 public class Stats {
     public final String name;
+    public final int decays;
     public final int n;
+    public final double decayedN;
     public final double min;
+    public final double decayedMin;
     public final double max;
+    public final double decayedMax;
     public final double mean;
     public final double variance;
     public final double skewness;
@@ -27,6 +31,10 @@ public class Stats {
         skewness = stats.skewness();
         kurtosis = stats.kurtosis();
         quantiles = ImmutableMap.copyOf(stats.quantiles());
+        decayedMin = stats.decayedMinimum();
+        decayedMax = stats.decayedMaximum();
+        decayedN = stats.decayedNum();
+        decays = stats.decayCount();
     }
 
     public Stats(final String name, final int n, final double min, final double max,
@@ -34,9 +42,13 @@ public class Stats {
                  final double skewness, final double kurtosis,
                  final Map<Double, Double> quantiles) {
         this.name = name;
+        this.decays = 0;
         this.n = n;
+        this.decayedN = n;
         this.min = min;
+        this.decayedMin = min;
         this.max = max;
+        this.decayedMax = max;
         this.mean = mean;
         this.variance = variance;
         this.skewness = skewness;

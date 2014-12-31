@@ -21,7 +21,7 @@ public class ServiceStats {
     private final Function<String, LiveStats> statsMaker;
 
     public ServiceStats(final double... quantiles) {
-        statsMaker = ignored -> new CompleteLiveStats(quantiles);
+        statsMaker = ignored -> new LiveStats(quantiles);
     }
 
     public void put(final String key, final double value) {

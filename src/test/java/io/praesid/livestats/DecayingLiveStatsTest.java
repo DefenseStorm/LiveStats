@@ -108,14 +108,16 @@ public class DecayingLiveStatsTest extends LiveStatsTestBase {
     private Stats test(final String name, final DoubleStream dataStream,
                        final Stats maxPes, final Optional<DoubleStream> expectedStream) {
         final double[] data = dataStream.limit(SAMPLE_COUNT).toArray();
-        final DecayingLiveStats live = new DecayingLiveStats(.05, Duration.ofMillis(2), TEST_TILES);
+        final LiveStats live = new LiveStats(.95, Duration.ofMillis(2), TEST_TILES);
 
         final long start = System.nanoTime();
-        Arrays.stream(data).forEachOrdered(live);
+        if (expectedStream.isPresent()) { // Order matters when we're changing from one stream to another
+            Arrays.stream(data).forEachOrdered(live);
+        } else {
+            Arrays.stream(data).parallel().forEach(live);
+        }
         final Stats captured = new Stats(name, live);
         log.info("live ({}ns/datum): {}", (System.nanoTime() - start) / live.num(), captured);
-        log.info("decayedNum: {}, decayCount: {}, decayedMin: {}, decayedMax: {}",
-                 live.decayedNum(), live.decayCount(), live.decayedMinimum(), live.decayedMaximum());
         final long realStart = System.nanoTime();
         final Stats real =
                 calculateReal(name, expectedStream.map(s -> s.limit(SAMPLE_COUNT)).orElse(Arrays.stream(data)));
