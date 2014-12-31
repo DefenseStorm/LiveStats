@@ -21,21 +21,21 @@ public class DecayingLiveStatsTest extends LiveStatsTestBase {
     private static final Logger log = LogManager.getLogger();
     private static final int SAMPLE_COUNT = 1000000; // Lots of thresholds need tuning if this is changed
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 200, .2, .1, 5, .02, 100, quantileMaxPes(.2, .1, .05, .05, .01, .02, .05));
+            new Stats("", 0, 300, 50, .2, 5, .02, 100, quantileMaxPes(.2, .1, .1, .05, .01, .02, .05));
     private static final Stats oneMaxPes =
             new Stats("", 0, 0, 0, 0, 0, 0, 0, quantileMaxPes(0, 0, 0, 0, 0, 0, 0));
     private static final Stats knownMaxPes =
             new Stats("", 0, 0, 0, .0000001, 30, 5, 300, quantileMaxPes(5, 20, 50, 50, 100, 100, 100));
     private static final Stats gaussianMaxPes =
-            new Stats("", 0, 50, 50, .1, 1, 2, 3000, quantileMaxPes(.2, .2, .2, .2, 5, 5, 20));
+            new Stats("", 0, 100, 100, .1, 1, 2, 20000, quantileMaxPes(.2, .2, .2, .2, 5, 5, 20));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, .2, 1, .2, .5, .000001, .5, quantileMaxPes(.5, .5, .2, .2, .1, .05, .005));
+            new Stats("", 0, 5, 5, .2, .5, .000001, 1, quantileMaxPes(.5, .5, .2, .5, .1, .1, .02));
     private static final Stats bimodalMaxPes =
-            new Stats("", 0, 5, 5, .2, 1, .01, 1, quantileMaxPes(.5, .5, .5, .2, .2, .5, 1));
+            new Stats("", 0, 50, 50, .2, 1, .01, 1, quantileMaxPes(.5, .5, .5, .2, .2, .5, 1));
     private static final Stats triangularMaxPes =
-            new Stats("", 0, 5, 5, .1, 1, .00001, 2, quantileMaxPes(.2, .5, .5, .5, .5, 1, 2));
+            new Stats("", 0, 20, 20, .2, 1, .00001, 2, quantileMaxPes(.2, .5, .5, .5, .5, 1, 2));
     private static final Stats bimodalThenTriangularMaxPes =
-            new Stats("", 0, 1, 5, .2, 5, .05, 20, quantileMaxPes(.5, .5, .5, .5, 10, 1, 20));
+            new Stats("", 0, 50, 50, .2, 5, .05, 20, quantileMaxPes(.5, .5, .5, .5, 10, 1, 20));
 
     @Test
     public void testOnePoint() { // Doesn't use SAMPLE_COUNT
