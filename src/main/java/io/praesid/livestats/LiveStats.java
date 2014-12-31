@@ -300,11 +300,18 @@ public final class LiveStats implements DoubleConsumer {
     private static final class Quantile {
         private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
+        private final StampedLock lock = new StampedLock();
+        private final StampedLock initLock = new StampedLock();
+
         // length of positionDeltas and idealPositions is N_MARKERS-1 because the lowest idealPosition is always 1
         private final double[] positionDeltas; // Immutable, how far the ideal positions move for each item
+        @GuardedBy("lock")
         private final double[] idealPositions;
+        @GuardedBy("lock")
         private final double[] positions = {1, 2, 3, 4, 5};
+        @GuardedBy("lock")
         private final double[] heights = new double[N_MARKERS];
+        @GuardedBy("initLock,lock") // guarded by both write locks, so either read lock guarantees visibility
         private int initializedMarkers = 0;
         public final double percentile;
 
@@ -317,31 +324,48 @@ public final class LiveStats implements DoubleConsumer {
             idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
         }
 
-        public synchronized double minimum() {
-            if (initializedMarkers < N_MARKERS) {
-                Arrays.sort(heights, 0, initializedMarkers);
+        public double minimum() {
+            sortIfNeeded();
+            final long optimisticStamp = lock.tryOptimisticRead();
+            double minimum = heights[0];
+            if (!lock.validate(optimisticStamp)) {
+                final long readStamp = lock.readLock();
+                minimum = heights[0];
+                lock.unlock(readStamp);
             }
-            return heights[0];
+            return minimum;
         }
 
-        public synchronized double maximum() {
-            if (initializedMarkers < N_MARKERS) {
-                Arrays.sort(heights, 0, initializedMarkers);
+        public double maximum() {
+            sortIfNeeded();
+            final long optimisticStamp = lock.tryOptimisticRead();
+            double maximum = heights[initializedMarkers - 1];
+            if (!lock.validate(optimisticStamp)) {
+                final long readStamp = lock.readLock();
+                maximum = heights[initializedMarkers - 1];
+                lock.unlock(readStamp);
             }
-            return heights[initializedMarkers - 1];
+            return maximum;
         }
 
-        public synchronized double quantile() {
-            if (initializedMarkers < N_MARKERS) {
-                Arrays.sort(heights, 0, initializedMarkers);
-                // make sure we don't overflow on percentile == 1 or underflow on percentile == 0
-                return heights[Math.min(Math.max(initializedMarkers - 1, 0), (int)(initializedMarkers * percentile))];
+        public double quantile() {
+            sortIfNeeded();
+            final long optimisticStamp = lock.tryOptimisticRead();
+            double quantile = heights[initializedMarkers / 2];
+            if (!lock.validate(optimisticStamp)) {
+                final long readStamp = lock.readLock();
+                quantile = heights[initializedMarkers / 2];
+                lock.unlock(readStamp);
             }
-            return heights[2];
+            return quantile;
         }
 
-        public synchronized void decay(final double decayMultiplier) {
-            if (decayMultiplier != 1 && initializedMarkers == N_MARKERS) {
+        public void decay(final double decayMultiplier) {
+            if (decayMultiplier == 1) {
+                return;
+            }
+            final long writeStamp = lock.writeLock();
+            if (initializedMarkers == N_MARKERS) {
                 for (int i = 0; i < idealPositions.length; i++) {
                     idealPositions[i] *= decayMultiplier;
                     positions[i+1] *= decayMultiplier;
@@ -363,37 +387,45 @@ public final class LiveStats implements DoubleConsumer {
                     }
                 }
             }
+            lock.unlock(writeStamp);
         }
 
         /**
          * Adds another datum
          */
-        public synchronized void add(final double item) {
-            if (initializedMarkers < N_MARKERS) {
-                heights[initializedMarkers] = item;
-                initializedMarkers++;
-                if (initializedMarkers == N_MARKERS) {
-                    Arrays.sort(heights);
+        public void add(final double item) {
+            final long writeStamp = lock.writeLock();
+            try {
+                if (initializedMarkers < N_MARKERS) {
+                    heights[initializedMarkers] = item;
+                    final long initWriteStamp = initLock.writeLock();
+                    initializedMarkers++;
+                    initLock.unlock(initWriteStamp);
+                    if (initializedMarkers == N_MARKERS) {
+                        Arrays.sort(heights);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            if (item > heights[N_MARKERS - 1]) {
-                heights[N_MARKERS - 1] = item; // Marker N_MARKERS-1 is max
-            }
-            if (heights[0] > item) {
-                heights[0] = item; // Marker 0 is min
-            }
-            positions[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
-            for (int i = N_MARKERS - 2; heights[i] > item; i--) { // Increment all other markers > item
-                positions[i]++;
-            }
+                if (item > heights[N_MARKERS - 1]) {
+                    heights[N_MARKERS - 1] = item; // Marker N_MARKERS-1 is max
+                }
+                if (heights[0] > item) {
+                    heights[0] = item; // Marker 0 is min
+                }
+                positions[N_MARKERS - 1]++; // Because marker N_MARKERS-1 is max, it always gets incremented
+                for (int i = N_MARKERS - 2; heights[i] > item; i--) { // Increment all other markers > item
+                    positions[i]++;
+                }
 
-            for (int i = 0; i < idealPositions.length; i++) {
-                idealPositions[i] += positionDeltas[i]; // updated desired positions
-            }
+                for (int i = 0; i < idealPositions.length; i++) {
+                    idealPositions[i] += positionDeltas[i]; // updated desired positions
+                }
 
-            adjust();
+                adjust();
+            } finally {
+                lock.unlock(writeStamp);
+            }
         }
 
         private void adjust() {
@@ -443,6 +475,21 @@ public final class LiveStats implements DoubleConsumer {
             final double lowerHalf = belowScale * (height - heightBelow);
             final double upperHalf = aboveScale * (heightAbove - height);
             return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
+        }
+
+        private void sortIfNeeded() {
+            final long optimisticStamp = initLock.tryOptimisticRead();
+            int myInitializedMarkers = initializedMarkers;
+            if (!initLock.validate(optimisticStamp)) {
+                final long readStamp = initLock.readLock();
+                myInitializedMarkers = initializedMarkers;
+                initLock.unlock(readStamp);
+            }
+            if (myInitializedMarkers < N_MARKERS) {
+                final long writeStamp = lock.writeLock();
+                Arrays.sort(heights, 0, initializedMarkers);
+                lock.unlock(writeStamp);
+            }
         }
     }
 }
