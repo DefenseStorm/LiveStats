@@ -4,15 +4,18 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 public class ServiceStats {
     private static final Logger log = LogManager.getLogger();
@@ -22,6 +25,10 @@ public class ServiceStats {
 
     public ServiceStats(final double... quantiles) {
         statsMaker = ignored -> new LiveStats(quantiles);
+    }
+
+    public ServiceStats(final double decayMultiplier, final Duration decayPeriod, final double... quantiles) {
+        statsMaker = ignored -> new LiveStats(decayMultiplier, decayPeriod, quantiles);
     }
 
     public void put(final String key, final double value) {
@@ -70,15 +77,20 @@ public class ServiceStats {
      * @return stats snapshots
      */
     public Stats[] consume() {
-        final List<Map.Entry<String, LiveStats>> savedStats = new ArrayList<>();
-        final Iterator<Map.Entry<String, LiveStats>> entryIterator = stats.entrySet().iterator();
+        final List<Entry<String, LiveStats>> savedStats = new ArrayList<>();
+        final Iterator<Entry<String, LiveStats>> entryIterator = stats.entrySet().iterator();
         while (entryIterator.hasNext()) {
             savedStats.add(entryIterator.next());
             entryIterator.remove();
         }
+        savedStats.forEach(e -> e.getValue().decay());
         // Stats overhead is in the microsecond range, so give a millisecond here for anyone in addTiming() to finish
         Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
         return savedStats.stream().map(e -> new Stats(e.getKey(), e.getValue())).toArray(Stats[]::new);
+    }
+
+    public Stream<Stats> get() {
+        return stats.entrySet().stream().peek(e -> e.getValue().decay()).map(e -> new Stats(e.getKey(), e.getValue()));
     }
 
     private void addTiming(final String key, final double value, final long endNanos) {
