@@ -173,115 +173,115 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double maximum() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double maximum = max;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             maximum = max;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return maximum;
     }
 
     public double decayedMaximum() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double decayedMaximum = decayedMax;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             decayedMaximum = decayedMax;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return decayedMaximum;
     }
 
     public double mean() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double mean = sum / decayedCount;
-        if (!lock.validate(stamp)) {
-            lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             mean = sum / decayedCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return mean;
     }
 
     public double minimum() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double minimum = min;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             minimum = min;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return minimum;
     }
 
     public double decayedMinimum() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double decayedMinimum = decayedMin;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             decayedMinimum = decayedMin;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return decayedMinimum;
     }
 
     public int num() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         int num = count;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             num = count;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return num;
     }
 
     public double decayedNum() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double decayedNum = decayedCount;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             decayedNum = decayedCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return decayedNum;
     }
 
     public int decayCount() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         int myDecayCount = decayCount;
-        if (!lock.validate(stamp)) {
-            stamp = lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             myDecayCount = decayCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return myDecayCount;
     }
 
     public double variance() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double variance = sumCentralMoment2 / decayedCount;
-        if (!lock.validate(stamp)) {
-            lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             variance = sumCentralMoment2 / decayedCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         return variance;
     }
 
     public double kurtosis() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
         double mySumCentralMoment4 = sumCentralMoment4;
         double myDecayedCount = decayedCount;
-        if (!lock.validate(stamp)) {
-            lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             mySumCentralMoment2 = sumCentralMoment2;
             mySumCentralMoment4 = sumCentralMoment4;
             myDecayedCount = decayedCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         // u4 / u2^2 - 3
         // (s4/c) / (s2/c)^2 - 3
@@ -296,16 +296,16 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     public double skewness() {
-        long stamp = lock.tryOptimisticRead();
+        final long optimisticStamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
         double mySumCentralMoment3 = sumCentralMoment3;
         double myDecayedCount = decayedCount;
-        if (!lock.validate(stamp)) {
-            lock.readLock();
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
             mySumCentralMoment2 = sumCentralMoment2;
             mySumCentralMoment3 = sumCentralMoment3;
             myDecayedCount = decayedCount;
-            lock.unlock(stamp);
+            lock.unlock(readStamp);
         }
         // u3 / u2^(3/2)
         // (s3/c) / (s2/c)^(3/2)
