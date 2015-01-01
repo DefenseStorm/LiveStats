@@ -1,6 +1,8 @@
 package io.praesid.livestats;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,6 +39,37 @@ public abstract class ServiceStats {
     public void complete(final String key, final long startNanos) {
         final long endNanos = System.nanoTime();
         addTiming(key, endNanos - startNanos, endNanos);
+    }
+
+    public <T> ListenableFuture<T> listenForTiming(
+            final String description, final Supplier<ListenableFuture<T>> subject) {
+        final long startNanos = System.nanoTime();
+        final ListenableFuture<T> future = subject.get();
+        future.addListener(() -> {
+            try {
+                future.get();
+                complete(appendSubType(description, true, false), startNanos);
+            } catch (final Throwable t) {
+                complete(appendSubType(description, false, true), startNanos);
+            }
+        }, MoreExecutors.directExecutor());
+        return future;
+    }
+
+    public <T> ListenableFuture<T> listenForTiming(
+            final String description, final Supplier<ListenableFuture<T>> subject, final Predicate<T> successful) {
+        final long start = System.nanoTime();
+        final ListenableFuture<T> future = subject.get();
+        future.addListener(() -> {
+            try {
+                final T result = future.get();
+                final long end = System.nanoTime(); // Count success test in overhead
+                addTiming(appendSubType(description, successful.test(result), false), end - start, end);
+            } catch (final Throwable t) {
+                complete(appendSubType(description, false, true), start);
+            }
+        }, MoreExecutors.directExecutor());
+        return future;
     }
 
     public <T> T collectTiming(final String description, final Supplier<T> subject) {
