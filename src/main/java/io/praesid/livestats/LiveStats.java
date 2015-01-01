@@ -7,7 +7,6 @@ import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.locks.StampedLock;
@@ -44,8 +43,7 @@ public final class LiveStats implements DoubleConsumer {
 
     private final ImmutableList<Quantile> quantiles;
     private final long startNanos = System.nanoTime();
-    private final double decayMultiplier;
-    private final long decayPeriodNanos;
+    private final DecayConfig decayConfig;
 
     /**
      * Constructs a LiveStats object which will track stats for all time
@@ -53,31 +51,29 @@ public final class LiveStats implements DoubleConsumer {
      * @param quantiles Quantiles to track (eg. .5 for the 50th percentile)
      */
     public LiveStats(final double... quantiles) {
-        this(1, Duration.ofMillis(0), quantiles);
+        this(DecayConfig.NEVER, quantiles);
     }
 
     /**
      * Constructs a LiveStats object which will exponentially decay collected stats over time
      *
-     * @param decayMultiplier the multiplier by which to reduce values when decaying
-     * @param decayPeriod the time between decay events
+     * @param decayConfig the configuration for time-based decay of statistics
      * @param quantiles Quantiles to track (eg. .5 for the 50th percentile)
      */
-    public LiveStats(double decayMultiplier, Duration decayPeriod, final double... quantiles) {
+    public LiveStats(final DecayConfig decayConfig, final double... quantiles) {
         final Builder<Quantile> tilesBuilder = ImmutableList.builder();
         for (final double tile : quantiles) {
             tilesBuilder.add(new Quantile(tile));
         }
         this.quantiles = tilesBuilder.build();
-        this.decayMultiplier = decayMultiplier;
-        decayPeriodNanos = decayPeriod.toNanos();
+        this.decayConfig = decayConfig;
     }
 
     public void decay() {
-        if (decayMultiplier == 1) {
+        if (DecayConfig.NEVER.equals(decayConfig)) {
             return;
         }
-        final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayPeriodNanos);
+        final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayConfig.period);
         final long optimisticStamp = lock.tryOptimisticRead();
         int myDecayCount = decayCount;
         if (!lock.validate(optimisticStamp)) {
@@ -91,7 +87,7 @@ public final class LiveStats implements DoubleConsumer {
         final double myDecayMultiplier;
         final long writeStamp = lock.writeLock();
         try {
-            myDecayMultiplier = Math.pow(decayMultiplier, expectedDecays - decayCount);
+            myDecayMultiplier = Math.pow(decayConfig.multiplier, expectedDecays - decayCount);
             if (count != 0) { // These turn into Double.NaN if decay happens while they're infinite
                 final double minMaxDecay = (decayedMax - decayedMin) * (myDecayMultiplier / 2);
                 decayedMin += minMaxDecay;

@@ -1,10 +1,11 @@
 package io.praesid.livestats;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Duration;
+import javax.annotation.concurrent.GuardedBy;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -12,24 +13,22 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-public class ServiceStats {
+public abstract class ServiceStats {
     private static final Logger log = LogManager.getLogger();
 
-    private Map<String, LiveStats> stats = new ConcurrentSkipListMap<>();
-    private final Function<String, LiveStats> statsMaker;
+    private static final ServiceStats NOOP = new NoopServiceStats();
 
-    public ServiceStats(final double... quantiles) {
-        statsMaker = ignored -> new LiveStats(quantiles);
-    }
+    private static final StampedLock lock = new StampedLock();
+    @GuardedBy("lock")
+    private static ServiceStats instance = null;
 
-    public ServiceStats(final double decayMultiplier, final Duration decayPeriod, final double... quantiles) {
-        statsMaker = ignored -> new LiveStats(decayMultiplier, decayPeriod, quantiles);
-    }
+    private ServiceStats() {}
 
     public void put(final String key, final double value) {
         addTiming(key, value, System.nanoTime());
@@ -76,34 +75,90 @@ public class ServiceStats {
      * Consumes a snapshot of the live stats currently collected
      * @return stats snapshots
      */
-    public Stats[] consume() {
-        final List<Entry<String, LiveStats>> savedStats = new ArrayList<>();
-        final Iterator<Entry<String, LiveStats>> entryIterator = stats.entrySet().iterator();
-        while (entryIterator.hasNext()) {
-            savedStats.add(entryIterator.next());
-            entryIterator.remove();
-        }
-        savedStats.forEach(e -> e.getValue().decay());
-        // Stats overhead is in the microsecond range, so give a millisecond here for anyone in addTiming() to finish
-        Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
-        return savedStats.stream().map(e -> new Stats(e.getKey(), e.getValue())).toArray(Stats[]::new);
-    }
+    public abstract Stats[] consume();
+    public abstract Stream<Stats> get();
+    protected abstract void addTiming(final String key, final double value, final long endNanos);
 
-    public Stream<Stats> get() {
-        return stats.entrySet().stream().peek(e -> e.getValue().decay()).map(e -> new Stats(e.getKey(), e.getValue()));
-    }
-
-    private void addTiming(final String key, final double value, final long endNanos) {
-        stats.computeIfAbsent(key, statsMaker).add(value);
-        if (log.isTraceEnabled()) {
-            final long overhead = System.nanoTime() - endNanos;
-            stats.computeIfAbsent("overhead", statsMaker).add(overhead);
-        }
-    }
-
-    private String appendSubType(final String description, final boolean success, final boolean error) {
+    private static String appendSubType(final String description, final boolean success, final boolean error) {
         // Check error first because collectTiming(description, subject) always passes true for success
         final String subType = error ? "error" : success ? "success" : "failure";
         return description + '/' + subType;
+    }
+
+    public static void configure(final double... quantiles) {
+        configure(DecayConfig.NEVER, quantiles);
+    }
+
+    public static void configure(final DecayConfig decayConfig, final double... quantiles) {
+        configure(decayConfig, ImmutableMap.of(), quantiles);
+    }
+
+    public static void configure(final DecayConfig defaultDecayConfig, final Map<String, DecayConfig> decayConfigMap,
+                                 final double... quantiles) {
+        final long stamp = lock.writeLock();
+        //noinspection VariableNotUsedInsideIf
+        if (instance != null) {
+            throw new IllegalStateException("ServiceStats does not support reconfiguration");
+        }
+        instance = new RealServiceStats(defaultDecayConfig, decayConfigMap, quantiles);
+        lock.unlock(stamp);
+    }
+
+    public static ServiceStats instance() {
+        final long optimisticStamp = lock.tryOptimisticRead();
+        ServiceStats myInstance = instance;
+        if (!lock.validate(optimisticStamp)) {
+            final long readStamp = lock.readLock();
+            myInstance = instance;
+            lock.unlock(readStamp);
+        }
+        return myInstance == null ? NOOP : myInstance;
+    }
+
+
+    private static class NoopServiceStats extends ServiceStats {
+        @Override public Stats[] consume() { return new Stats[0]; }
+        @Override public Stream<Stats> get() { return Stream.of(); }
+        @Override protected void addTiming(final String key, final double value, final long endNanos) { }
+    }
+
+    private static class RealServiceStats extends ServiceStats {
+        private Map<String, LiveStats> stats = new ConcurrentSkipListMap<>();
+        private final Function<String, LiveStats> statsMaker;
+
+        private RealServiceStats(final DecayConfig defaultDecayConfig, final Map<String, DecayConfig> decayConfigMap,
+                                 final double... quantiles) {
+            statsMaker = key -> new LiveStats(decayConfigMap.getOrDefault(key, defaultDecayConfig), quantiles);
+        }
+
+        @Override
+        public Stats[] consume() {
+            final List<Entry<String, LiveStats>> savedStats = new ArrayList<>();
+            final Iterator<Entry<String, LiveStats>> entryIterator = stats.entrySet().iterator();
+            while (entryIterator.hasNext()) {
+                savedStats.add(entryIterator.next());
+                entryIterator.remove();
+            }
+            savedStats.forEach(e -> e.getValue().decay());
+            // Stats overhead is in the microsecond range, give a millisecond here for anyone in addTiming() to finish
+            Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+            return savedStats.stream().map(e -> new Stats(e.getKey(), e.getValue())).toArray(Stats[]::new);
+        }
+
+        @Override
+        public Stream<Stats> get() {
+            return stats.entrySet().stream()
+                        .peek(e -> e.getValue().decay())
+                        .map(e -> new Stats(e.getKey(), e.getValue()));
+        }
+
+        @Override
+        protected void addTiming(final String key, final double value, final long endNanos) {
+            stats.computeIfAbsent(key, statsMaker).add(value);
+            if (log.isTraceEnabled()) {
+                final long overhead = System.nanoTime() - endNanos;
+                stats.computeIfAbsent("overhead", statsMaker).add(overhead);
+            }
+        }
     }
 }
