@@ -129,10 +129,6 @@ public abstract class ServiceStats {
     public static void configure(final DecayConfig defaultDecayConfig, final Map<String, DecayConfig> decayConfigMap,
                                  final double... quantiles) {
         final long stamp = lock.writeLock();
-        //noinspection VariableNotUsedInsideIf
-        if (instance != null) {
-            throw new IllegalStateException("ServiceStats does not support reconfiguration");
-        }
         instance = new RealServiceStats(defaultDecayConfig, decayConfigMap, quantiles);
         lock.unlock(stamp);
     }
