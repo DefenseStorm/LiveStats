@@ -32,47 +32,89 @@ public abstract class ServiceStats {
 
     private ServiceStats() {}
 
-    public void put(final String key, final double value) {
-        addTiming(key, value, System.nanoTime());
+    /**
+     * Puts a timing entry of `nanos` into the stats for `key`.
+     * @param key The key to add a timing entry for.
+     * @param nanos The number of nanoseconds to record.
+     */
+    public void put(final String key, final long nanos) {
+        addTiming(key, nanos, System.nanoTime());
     }
 
+    /**
+     * Puts a timing entry of `System.nanoTime() - startNanos` into the stats for `key`.
+     * @param key The key to add a timing entry for.
+     * @param startNanos The System.nanoTime() at which the subject task started.
+     */
     public void complete(final String key, final long startNanos) {
         final long endNanos = System.nanoTime();
         addTiming(key, endNanos - startNanos, endNanos);
     }
 
+    /**
+     * Records the execution time for the future produced by `subject` at a key based on `name`.
+     *
+     * The key for the stats is "`name`/success" unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject A supplier which starts the task to be timed.
+     * @param <T>
+     * @return The same future produced by `subject`.
+     */
     public <T> ListenableFuture<T> listenForTiming(
-            final String description, final Supplier<ListenableFuture<T>> subject) {
+            final String name, final Supplier<ListenableFuture<T>> subject) {
         final long startNanos = System.nanoTime();
         final ListenableFuture<T> future = subject.get();
         future.addListener(() -> {
             try {
-                future.get();
-                complete(appendSubType(description, true, false), startNanos);
+                future.get(); // Called to trigger the future's exception throw
+                complete(appendSubType(name, true, false), startNanos);
             } catch (final Throwable t) {
-                complete(appendSubType(description, false, true), startNanos);
+                complete(appendSubType(name, false, true), startNanos);
             }
         }, MoreExecutors.directExecutor());
         return future;
     }
 
+    /**
+     * Records the execution time for the future produced by `subject` at a key based on `name`.
+     *
+     * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
+     * unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject A supplier which starts the code to be timed.
+     * @param successful A predicate on the result of the supplied future to determine whether the task was successful.
+     * @param <T>
+     * @return The same future produced by `subject`.
+     */
     public <T> ListenableFuture<T> listenForTiming(
-            final String description, final Supplier<ListenableFuture<T>> subject, final Predicate<T> successful) {
+            final String name, final Supplier<ListenableFuture<T>> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
         final ListenableFuture<T> future = subject.get();
         future.addListener(() -> {
             try {
                 final T result = future.get();
                 final long end = System.nanoTime(); // Count success test in overhead
-                addTiming(appendSubType(description, successful.test(result), false), end - start, end);
+                addTiming(appendSubType(name, successful.test(result), false), end - start, end);
             } catch (final Throwable t) {
-                complete(appendSubType(description, false, true), start);
+                complete(appendSubType(name, false, true), start);
             }
         }, MoreExecutors.directExecutor());
         return future;
     }
 
-    public <T> T collectTiming(final String description, final Supplier<T> subject) {
+    /**
+     * Records the execution time for `subject` at a key based on `name`.
+     *
+     * The key for the stats is "`name`/success" unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject The task to be timed.
+     * @param <T>
+     * @return The same result produced by `subject`.
+     */
+    public <T> T collectTiming(final String name, final Supplier<T> subject) {
         final long startNanos = System.nanoTime();
         boolean error = false;
         try {
@@ -81,11 +123,23 @@ public abstract class ServiceStats {
             error = true;
             throw t;
         } finally {
-            complete(appendSubType(description, true, error), startNanos);
+            complete(appendSubType(name, true, error), startNanos);
         }
     }
 
-    public <T> T collectTiming(final String description, final Supplier<T> subject, final Predicate<T> successful) {
+    /**
+     * Records the execution time for `subject` at a key based on `name`.
+     *
+     * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
+     * unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject The task to be timed.
+     * @param successful A predicate on the result of the supplied future to determine whether the task was successful.
+     * @param <T>
+     * @return The same result produced by `subject`.
+     */
+    public <T> T collectTiming(final String name, final Supplier<T> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
         boolean success = false;
         boolean error = false;
@@ -100,22 +154,29 @@ public abstract class ServiceStats {
             error = true;
             throw t;
         } finally {
-            addTiming(appendSubType(description, success, error), end - start, end);
+            addTiming(appendSubType(name, success, error), end - start, end);
         }
     }
 
     /**
-     * Consumes a snapshot of the live stats currently collected
+     * Consumes a snapshot of the live stats currently collected.
+     * Usually, this method makes sense when using non-decaying stats.
+     * NOTE: This is a destructive call, the returned stats are the only remaining reference to the collected data.
      * @return stats snapshots
      */
     public abstract Stats[] consume();
+    /**
+     * Gets a snapshot of the live stats currently collected.
+     * Usually, this method makes sense when using decaying stats.
+     * @return stats snapshots
+     */
     public abstract Stream<Stats> get();
-    protected abstract void addTiming(final String key, final double value, final long endNanos);
+    protected abstract void addTiming(final String key, final long nanos, final long endNanos);
 
-    private static String appendSubType(final String description, final boolean success, final boolean error) {
-        // Check error first because collectTiming(description, subject) always passes true for success
+    private static String appendSubType(final String name, final boolean success, final boolean error) {
+        // Check error first because collectTiming(name, subject) always passes true for success
         final String subType = error ? "error" : success ? "success" : "failure";
-        return description + '/' + subType;
+        return name + '/' + subType;
     }
 
     public static void configure(final double... quantiles) {
@@ -148,7 +209,7 @@ public abstract class ServiceStats {
     private static class NoopServiceStats extends ServiceStats {
         @Override public Stats[] consume() { return new Stats[0]; }
         @Override public Stream<Stats> get() { return Stream.of(); }
-        @Override protected void addTiming(final String key, final double value, final long endNanos) { }
+        @Override protected void addTiming(final String key, final long nanos, final long endNanos) { }
     }
 
     private static class RealServiceStats extends ServiceStats {
@@ -182,8 +243,8 @@ public abstract class ServiceStats {
         }
 
         @Override
-        protected void addTiming(final String key, final double value, final long endNanos) {
-            stats.computeIfAbsent(key, statsMaker).add(value);
+        protected void addTiming(final String key, final long nanos, final long endNanos) {
+            stats.computeIfAbsent(key, statsMaker).add(nanos);
             if (log.isTraceEnabled()) {
                 final long overhead = System.nanoTime() - endNanos;
                 stats.computeIfAbsent("overhead", statsMaker).add(overhead);
