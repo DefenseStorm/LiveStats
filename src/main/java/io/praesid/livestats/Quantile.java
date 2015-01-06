@@ -36,6 +36,9 @@ final class Quantile {
         idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
     }
 
+    /**
+     * @return The current approximation of the configured quantile.
+     */
     public double quantile() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double quantile = heights[initializedMarkers / 2]; // Let's just accept that this is not accurate pre init
@@ -47,6 +50,9 @@ final class Quantile {
         return quantile;
     }
 
+    /**
+     * Decays the currently recorded and ideal positions by decayMultiplier
+     */
     public void decay(final double decayMultiplier) {
         if (decayMultiplier == 1) {
             return;

@@ -68,6 +68,12 @@ public final class LiveStats implements DoubleConsumer {
         this.decayConfig = decayConfig;
     }
 
+    /**
+     * Decays the currently recorded stats as much as they currently should be.
+     *
+     * The only time you need to call this directly is before reading stats.
+     * In general, it's called automatically as you add items.
+     */
     public void decay() {
         if (DecayConfig.NEVER.equals(decayConfig)) {
             return;
@@ -167,6 +173,9 @@ public final class LiveStats implements DoubleConsumer {
         return builder.build();
     }
 
+    /**
+     * @return The maximum value.
+     */
     public double maximum() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double maximum = max;
@@ -178,6 +187,13 @@ public final class LiveStats implements DoubleConsumer {
         return maximum;
     }
 
+    /**
+     * Gets the decayed maximum value of items so far added.  This is not generally very useful, but could
+     * be used to drive some kind of peak meter or something.  This value tends to jump around a lot as new
+     * maximums come in and decay periods hit.
+     *
+     * @return The decayed maximum.
+     */
     public double decayedMaximum() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double decayedMaximum = decayedMax;
@@ -189,6 +205,9 @@ public final class LiveStats implements DoubleConsumer {
         return decayedMaximum;
     }
 
+    /**
+     * @return The current decayed mean.
+     */
     public double mean() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double mean = sum / decayedCount;
@@ -200,6 +219,9 @@ public final class LiveStats implements DoubleConsumer {
         return mean;
     }
 
+    /**
+     * @return The maximum value.
+     */
     public double minimum() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double minimum = min;
@@ -211,6 +233,13 @@ public final class LiveStats implements DoubleConsumer {
         return minimum;
     }
 
+    /**
+     * Gets the decayed minimum value of items so far added.  This is not generally very useful, but could
+     * be used to drive some kind of peak meter or something.  This value tends to jump around a lot as new
+     * minimums come in and decay periods hit.
+     *
+     * @return The decayed minimum.
+     */
     public double decayedMinimum() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double decayedMinimum = decayedMin;
@@ -222,6 +251,9 @@ public final class LiveStats implements DoubleConsumer {
         return decayedMinimum;
     }
 
+    /**
+     * @return The total number of items.
+     */
     public long num() {
         final long optimisticStamp = lock.tryOptimisticRead();
         long num = count;
@@ -233,6 +265,9 @@ public final class LiveStats implements DoubleConsumer {
         return num;
     }
 
+    /**
+     * @return The approximate number of items counted in decayed stats.
+     */
     public double decayedNum() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double decayedNum = decayedCount;
@@ -244,6 +279,9 @@ public final class LiveStats implements DoubleConsumer {
         return decayedNum;
     }
 
+    /**
+     * @return The number of times that stats have been decayed.
+     */
     public int decayCount() {
         final long optimisticStamp = lock.tryOptimisticRead();
         int myDecayCount = decayCount;
@@ -255,6 +293,9 @@ public final class LiveStats implements DoubleConsumer {
         return myDecayCount;
     }
 
+    /**
+     * @return The current decayed variance.
+     */
     public double variance() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double variance = sumCentralMoment2 / decayedCount;
@@ -266,6 +307,9 @@ public final class LiveStats implements DoubleConsumer {
         return variance;
     }
 
+    /**
+     * @return The current decayed kurtosis.
+     */
     public double kurtosis() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
@@ -290,6 +334,9 @@ public final class LiveStats implements DoubleConsumer {
         return mySumCentralMoment4 * myDecayedCount / Math.pow(mySumCentralMoment2, 2) - 3;
     }
 
+    /**
+     * @return The current decayed skewness.
+     */
     public double skewness() {
         final long optimisticStamp = lock.tryOptimisticRead();
         double mySumCentralMoment2 = sumCentralMoment2;
