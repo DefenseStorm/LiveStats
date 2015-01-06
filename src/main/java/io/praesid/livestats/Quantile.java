@@ -37,7 +37,6 @@ final class Quantile {
     }
 
     public double quantile() {
-        sortIfNeeded();
         final long optimisticStamp = lock.tryOptimisticRead();
         double quantile = heights[initializedMarkers / 2];
         if (!lock.validate(optimisticStamp)) {
@@ -73,9 +72,7 @@ final class Quantile {
                 final long initWriteStamp = initLock.writeLock();
                 initializedMarkers++;
                 initLock.unlock(initWriteStamp);
-                if (initializedMarkers == N_MARKERS) {
-                    Arrays.sort(heights);
-                }
+                Arrays.sort(heights); // Always sort because it simplifies quantile() for these few elements
                 return;
             }
 
@@ -151,20 +148,5 @@ final class Quantile {
         final double lowerHalf = belowScale * (height - heightBelow);
         final double upperHalf = aboveScale * (heightAbove - height);
         return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
-    }
-
-    private void sortIfNeeded() {
-        final long optimisticStamp = initLock.tryOptimisticRead();
-        int myInitializedMarkers = initializedMarkers;
-        if (!initLock.validate(optimisticStamp)) {
-            final long readStamp = initLock.readLock();
-            myInitializedMarkers = initializedMarkers;
-            initLock.unlock(readStamp);
-        }
-        if (myInitializedMarkers < N_MARKERS) {
-            final long writeStamp = lock.writeLock();
-            Arrays.sort(heights, 0, initializedMarkers);
-            lock.unlock(writeStamp);
-        }
     }
 }
