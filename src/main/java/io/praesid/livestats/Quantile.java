@@ -38,7 +38,7 @@ final class Quantile {
 
     public double quantile() {
         final long optimisticStamp = lock.tryOptimisticRead();
-        double quantile = heights[initializedMarkers / 2];
+        double quantile = heights[initializedMarkers / 2]; // Let's just accept that this is not accurate pre init
         if (!lock.validate(optimisticStamp)) {
             final long readStamp = lock.readLock();
             quantile = heights[initializedMarkers / 2];
@@ -67,7 +67,7 @@ final class Quantile {
     public void add(final double item, final double targetMin, final double targetMax) {
         final long writeStamp = lock.writeLock();
         try {
-            if (initializedMarkers < N_MARKERS) {
+            if (initializedMarkers < N_MARKERS) { // As noted, either lock gives visibility, both are taken for write
                 heights[initializedMarkers] = item;
                 final long initWriteStamp = initLock.writeLock();
                 initializedMarkers++;
