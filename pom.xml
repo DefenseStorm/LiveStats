@@ -4,7 +4,7 @@
 
     <artifactId>live-stats</artifactId>
     <packaging>jar</packaging>
-    <version>1.1-SNAPSHOT</version>
+    <version>1.0.1</version>
     <name>live-stats</name>
 
     <parent>
@@ -47,6 +47,6 @@
     </dependencies>
     <scm>
         <connection>scm:git:ssh://git@github.com/Praesidio/LiveStats.git</connection>
-        <tag>HEAD</tag>
+        <tag>live-stats-1.0.1</tag>
     </scm>
 </project>
