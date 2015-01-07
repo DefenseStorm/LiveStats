@@ -78,7 +78,7 @@ final class Quantile {
                 final long initWriteStamp = initLock.writeLock();
                 initializedMarkers++;
                 initLock.unlock(initWriteStamp);
-                Arrays.sort(heights); // Always sort because it simplifies quantile() for these few elements
+                Arrays.sort(heights, 0, initializedMarkers); // Always sort, simplifies quantile() initially
                 return;
             }
 
