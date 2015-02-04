@@ -15,10 +15,10 @@ public class Stats {
     public final double decayedMin;
     public final double max;
     public final double decayedMax;
-    public final double mean;
-    public final double variance;
-    public final double skewness;
-    public final double kurtosis;
+    public final Double mean;
+    public final Double variance;
+    public final Double skewness;
+    public final Double kurtosis;
     public final Map<Double, Double> quantiles;
 
     public Stats(final String name, final LiveStats stats) {
@@ -26,10 +26,10 @@ public class Stats {
         n = stats.num();
         min = stats.minimum();
         max = stats.maximum();
-        mean = stats.mean();
-        variance = stats.variance();
-        skewness = stats.skewness();
-        kurtosis = stats.kurtosis();
+        mean = nanToNull(stats.mean());
+        variance = nanToNull(stats.variance());
+        skewness = nanToNull(stats.skewness());
+        kurtosis = nanToNull(stats.kurtosis());
         quantiles = ImmutableMap.copyOf(stats.quantiles());
         decayedMin = stats.decayedMinimum();
         decayedMax = stats.decayedMaximum();
@@ -54,5 +54,10 @@ public class Stats {
         this.skewness = skewness;
         this.kurtosis = kurtosis;
         this.quantiles = ImmutableMap.copyOf(quantiles);
+    }
+
+    private static Double nanToNull(final double value) {
+        //noinspection ReturnOfNull
+        return Double.isNaN(value) ? null : value;
     }
 }
