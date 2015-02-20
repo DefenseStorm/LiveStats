@@ -12,6 +12,7 @@ import org.apache.logging.log4j.Logger;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
@@ -169,7 +170,7 @@ public abstract class ServiceStats {
      * Usually, this method makes sense when using decaying stats.
      * @return stats snapshots
      */
-    public abstract Stream<Stats> get();
+    public abstract Stream<Stats> get(final String... statsNames);
     protected abstract void addTiming(final String key, final long nanos, final long endNanos);
 
     private static String appendSubType(final String name, final boolean success, final boolean error) {
@@ -207,7 +208,7 @@ public abstract class ServiceStats {
 
     private static class NoopServiceStats extends ServiceStats {
         @Override public Stats[] consume() { return new Stats[0]; }
-        @Override public Stream<Stats> get() { return Stream.of(); }
+        @Override public Stream<Stats> get(final String... statsNames) { return Stream.of(); }
         @Override protected void addTiming(final String key, final long nanos, final long endNanos) { }
     }
 
@@ -241,10 +242,12 @@ public abstract class ServiceStats {
         }
 
         @Override
-        public Stream<Stats> get() {
-            return stats.asMap().entrySet().stream()
-                        .peek(e -> e.getValue().decay())
-                        .map(e -> new Stats(e.getKey(), e.getValue()));
+        public Stream<Stats> get(final String... statsNames) {
+            final Map<String, LiveStats> statsToReturn =
+                    statsNames.length == 0 ? stats.asMap() : stats.getAllPresent(Arrays.asList(statsNames));
+            return statsToReturn.entrySet().stream()
+                       .peek(e -> e.getValue().decay())
+                       .map(e -> new Stats(e.getKey(), e.getValue()));
         }
 
         @Override
