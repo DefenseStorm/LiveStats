@@ -130,6 +130,38 @@ public abstract class ServiceStats {
     /**
      * Records the execution time for `subject` at a key based on `name`.
      *
+     * The key for the stats is "`name`/success" unless the task throws, then it's "`name`/error" or "`name`/failure"
+     * based on the supplied function.
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject The task to be timed.
+     * @param expected A predicate to indicate whether an thrown Throwable is an expected 'failure' or an 'error'.
+     * @param <T>
+     * @return The same result produced by `subject`.
+     */
+    public <T> T collectTimingWithThrownFailures(final String name, final Supplier<T> subject,
+                                                 final Predicate<Throwable> expected) {
+        final long start = System.nanoTime();
+        boolean success = false;
+        boolean error = false;
+        long end = -1;
+        try {
+            final T result = subject.get();
+            end = System.nanoTime(); // because of counting the expected check as overhead on throw
+            success = true;
+            return result;
+        } catch (final Throwable t) {
+            end = System.nanoTime(); // count expected check as overhead
+            error = !expected.test(t);
+            throw t;
+        } finally {
+            addTiming(appendSubType(name, success, error), end - start, end);
+        }
+    }
+
+    /**
+     * Records the execution time for `subject` at a key based on `name`.
+     *
      * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
      * unless the task throws an exception, then it's "`name`/error".
      *
