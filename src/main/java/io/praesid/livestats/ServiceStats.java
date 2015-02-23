@@ -211,6 +211,12 @@ public abstract class ServiceStats {
         return name + '/' + subType;
     }
 
+    public static void disable() {
+        final long stamp = lock.writeLock();
+        instance = null;
+        lock.unlock(stamp);
+    }
+
     public static void configure(final double... quantiles) {
         configure(DecayConfig.NEVER, quantiles);
     }
