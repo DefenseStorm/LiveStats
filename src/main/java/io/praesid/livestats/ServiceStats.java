@@ -274,7 +274,7 @@ public abstract class ServiceStats {
             // Stats overhead is in the microsecond range, give a millisecond here for anyone in addTiming() to finish
             Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
             return savedStats.entrySet().stream()
-                             .peek(e -> e.getValue().decay())
+                             .peek(e -> e.getValue().decayByTime())
                              .map(e -> new Stats(e.getKey(), e.getValue()))
                              .toArray(Stats[]::new);
         }
@@ -284,7 +284,7 @@ public abstract class ServiceStats {
             final Map<String, LiveStats> statsToReturn =
                     statsNames.length == 0 ? stats.asMap() : stats.getAllPresent(Arrays.asList(statsNames));
             return statsToReturn.entrySet().stream()
-                       .peek(e -> e.getValue().decay())
+                       .peek(e -> e.getValue().decayByTime())
                        .map(e -> new Stats(e.getKey(), e.getValue()));
         }
 

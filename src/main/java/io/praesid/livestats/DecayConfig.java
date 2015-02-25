@@ -18,6 +18,13 @@ public class DecayConfig {
     public final double multiplier;
     public final long period;
 
+    public DecayConfig(final double multiplier) {
+        Preconditions.checkArgument(multiplier >= 0, "Multiplier must be >= 0");
+        Preconditions.checkArgument(multiplier < 1, "Multiplier must be < 1");
+        this.multiplier = multiplier;
+        this.period = 0;
+    }
+
     public DecayConfig(final double multiplier, final Duration period) {
         Preconditions.checkArgument(multiplier >= 0, "Multiplier must be >= 0");
         Preconditions.checkArgument(multiplier < 1, "Multiplier must be < 1");

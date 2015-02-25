@@ -74,8 +74,8 @@ public final class LiveStats implements DoubleConsumer {
      * The only time you need to call this directly is before reading stats.
      * In general, it's called automatically as you add items.
      */
-    public void decay() {
-        if (DecayConfig.NEVER.equals(decayConfig)) {
+    public void decayByTime() {
+        if (decayConfig.multiplier == 1 || decayConfig.period == 0) {
             return;
         }
         final int expectedDecays = (int)((System.nanoTime() - startNanos) / decayConfig.period);
@@ -89,8 +89,19 @@ public final class LiveStats implements DoubleConsumer {
         if (expectedDecays == myDecayCount) {
             return;
         }
-        final double myDecayMultiplier;
+        decayTo(lock.writeLock(), expectedDecays);
+    }
+
+    public void decay() {
+        if (decayConfig.multiplier == 1 || decayConfig.period != 0) {
+            return;
+        }
         final long writeStamp = lock.writeLock();
+        decayTo(writeStamp, decayCount+1);
+    }
+
+    private void decayTo(final long writeStamp, final int expectedDecays) {
+        final double myDecayMultiplier;
         try {
             myDecayMultiplier = Math.pow(decayConfig.multiplier, expectedDecays - decayCount);
             if (count != 0) { // These turn into Double.NaN if decay happens while they're infinite
@@ -129,7 +140,7 @@ public final class LiveStats implements DoubleConsumer {
      * @param item the value to add
      */
     public void add(double item) {
-        decay();
+        decayByTime();
 
         final double targetMin;
         final double targetMax;

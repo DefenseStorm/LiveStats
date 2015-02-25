@@ -4,7 +4,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,9 +19,9 @@ import static org.junit.Assert.assertEquals;
 public class DecayingLiveStatsTest extends LiveStatsTestBase {
     private static final Logger log = LogManager.getLogger();
     private static final int SAMPLE_COUNT = 1000000; // Lots of thresholds need tuning if this is changed
-    private static final DecayConfig decayConfig = new DecayConfig(.95, Duration.ofMillis(2));
+    private static final DecayConfig decayConfig = new DecayConfig(.95);
     private static final Stats expovarMaxPes =
-            new Stats("", 0, 300, 50, .2, 5, .02, 100, quantileMaxPes(.2, .1, .1, .05, .01, .02, .05));
+            new Stats("", 0, 300, 50, .2, 5, .02, 100, quantileMaxPes(.2, .1, .1, .05, .02, .02, .05));
     private static final Stats oneMaxPes =
             new Stats("", 0, 0, 0, 0, 0, 0, 0, quantileMaxPes(0, 0, 0, 0, 0, 0, 0));
     private static final Stats knownMaxPes =
@@ -112,10 +111,11 @@ public class DecayingLiveStatsTest extends LiveStatsTestBase {
         final LiveStats live = new LiveStats(decayConfig, TEST_TILES);
 
         final long start = System.nanoTime();
-        if (expectedStream.isPresent()) { // Order matters when we're changing from one stream to another
-            Arrays.stream(data).forEachOrdered(live);
-        } else {
-            Arrays.stream(data).parallel().forEach(live);
+        for (int i = 0; i < data.length; i++) {
+            if (i%(SAMPLE_COUNT/200) == 0) {
+                live.decay();
+            }
+            live.accept(data[i]);
         }
         final Stats captured = new Stats(name, live);
         log.info("live ({}ns/datum): {}", (System.nanoTime() - start) / live.num(), captured);
