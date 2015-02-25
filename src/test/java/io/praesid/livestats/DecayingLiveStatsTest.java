@@ -30,11 +30,11 @@ public class DecayingLiveStatsTest extends LiveStatsTestBase {
     private static final Stats gaussianMaxPes =
             new Stats("", 0, 100, 100, .1, 1, 2, 20000, quantileMaxPes(.2, .2, .2, .2, 5, 5, 20));
     private static final Stats uniformMaxPes =
-            new Stats("", 0, 5, 5, .2, .5, .000002, 1, quantileMaxPes(.5, .5, .2, .5, .1, .1, .02));
+            new Stats("", 0, 5, 5, .2, .5, .000002, 1, quantileMaxPes(.5, .5, .5, .5, .1, .1, .02));
     private static final Stats bimodalMaxPes =
             new Stats("", 0, 50, 50, .2, 1, .01, 1, quantileMaxPes(.5, .5, .5, .2, .2, .5, 1));
     private static final Stats triangularMaxPes =
-            new Stats("", 0, 20, 20, .2, 1, .00001, 2, quantileMaxPes(.2, .5, .5, .5, .5, 1, 2));
+            new Stats("", 0, 20, 20, .2, 1, .00001, 2, quantileMaxPes(.5, .5, .5, .5, .5, 1, 2));
     private static final Stats bimodalThenTriangularMaxPes =
             new Stats("", 0, 50, 50, .2, 5, .05, 20, quantileMaxPes(.2, .2, .5, .5, .5, 1, 3));
 
