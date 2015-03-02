@@ -2,19 +2,24 @@ package io.praesid.livestats;
 
 import com.google.common.collect.ImmutableMap;
 import lombok.ToString;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Optional;
 
 @ToString
 public class Stats {
+    private static final Logger log = LogManager.getLogger();
+
     public final String name;
     public final int decays;
     public final long n;
-    public final double decayedN;
-    public final double min;
-    public final double decayedMin;
-    public final double max;
-    public final double decayedMax;
+    public final Double decayedN;
+    public final Double min;
+    public final Double decayedMin;
+    public final Double max;
+    public final Double decayedMax;
     public final Double mean;
     public final Double variance;
     public final Double skewness;
@@ -24,16 +29,20 @@ public class Stats {
     public Stats(final String name, final LiveStats stats) {
         this.name = name;
         n = stats.num();
-        min = stats.minimum();
-        max = stats.maximum();
-        mean = nanToNull(stats.mean());
-        variance = nanToNull(stats.variance());
-        skewness = nanToNull(stats.skewness());
-        kurtosis = nanToNull(stats.kurtosis());
-        quantiles = ImmutableMap.copyOf(stats.quantiles());
-        decayedMin = stats.decayedMinimum();
-        decayedMax = stats.decayedMaximum();
-        decayedN = stats.decayedNum();
+        min = specialFloatsToNull(name, "min", stats.minimum());
+        max = specialFloatsToNull(name, "max", stats.maximum());
+        mean = specialFloatsToNull(name, "mean", stats.mean());
+        variance = specialFloatsToNull(name, "variance", stats.variance());
+        skewness = specialFloatsToNull(name, "skewness", stats.skewness());
+        kurtosis = specialFloatsToNull(name, "kurtosis", stats.kurtosis());
+        final ImmutableMap.Builder<Double, Double> quantilesBuilder = ImmutableMap.builder();
+        stats.quantiles.forEach(q -> Optional.ofNullable(specialFloatsToNull(name, "" + q.percentile,
+                                                                             q.quantile()))
+                                             .ifPresent(quantile -> quantilesBuilder.put(q.percentile, quantile)));
+        quantiles = quantilesBuilder.build();
+        decayedMin = specialFloatsToNull(name, "decayedMin", stats.decayedMinimum());
+        decayedMax = specialFloatsToNull(name, "decayedMax", stats.decayedMaximum());
+        decayedN = specialFloatsToNull(name, "decayedN", stats.decayedNum());
         decays = stats.decayCount();
     }
 
@@ -44,7 +53,7 @@ public class Stats {
         this.name = name;
         this.decays = 0;
         this.n = n;
-        this.decayedN = n;
+        this.decayedN = (double)n;
         this.min = min;
         this.decayedMin = min;
         this.max = max;
@@ -56,8 +65,16 @@ public class Stats {
         this.quantiles = ImmutableMap.copyOf(quantiles);
     }
 
-    private static Double nanToNull(final double value) {
-        //noinspection ReturnOfNull
-        return Double.isNaN(value) ? null : value;
+    @SuppressWarnings("ReturnOfNull")
+    private static Double specialFloatsToNull(final String name, final String var, final double value) {
+        if (Double.isNaN(value)) {
+            log.debug("{}: {} is NaN", name, var);
+            return null;
+        }
+        if (Double.isInfinite(value)) {
+            log.debug("{}: {} is infinite", name, var);
+            return null;
+        }
+        return value;
     }
 }

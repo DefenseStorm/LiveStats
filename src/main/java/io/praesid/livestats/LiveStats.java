@@ -2,12 +2,10 @@ package io.praesid.livestats;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
-import com.google.common.collect.ImmutableMap;
 import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Map;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.DoubleConsumer;
 
@@ -40,7 +38,7 @@ public final class LiveStats implements DoubleConsumer {
     @GuardedBy("lock")
     private int decayCount = 0;
 
-    private final ImmutableList<Quantile> quantiles;
+    public final ImmutableList<Quantile> quantiles;
     private final long startNanos = System.nanoTime();
     private final DecayConfig decayConfig;
 
@@ -171,17 +169,6 @@ public final class LiveStats implements DoubleConsumer {
         for (final Quantile quantile : quantiles) {
             quantile.add(item, targetMin, targetMax);
         }
-    }
-
-    /**
-     * @return a Map of quantile to approximate value
-     */
-    public Map<Double, Double> quantiles() {
-        final ImmutableMap.Builder<Double, Double> builder = ImmutableMap.builder();
-        for (final Quantile quantile : quantiles) {
-            builder.put(quantile.percentile, quantile.quantile());
-        }
-        return builder.build();
     }
 
     /**
