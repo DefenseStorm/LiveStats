@@ -87,7 +87,7 @@ public abstract class ServiceStats {
      * @param <T>
      * @return The same future produced by `subject`.
      */
-    public <T> CompletableFuture<T> listenForCompletableTiming(
+    public <T> CompletableFuture<T> timingOnCompletion(
             final String name, final Supplier<CompletableFuture<T>> subject) {
         final long startNanos = System.nanoTime();
         return subject.get().whenComplete((result, thrown) -> {
@@ -139,7 +139,7 @@ public abstract class ServiceStats {
      * @param <T>
      * @return The same future produced by `subject`.
      */
-    public <T> CompletableFuture<T> listenForCompletableTiming(
+    public <T> CompletableFuture<T> timingOnCompletion(
             final String name, final Supplier<CompletableFuture<T>> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
         return subject.get().whenComplete((result, thrown) -> {
