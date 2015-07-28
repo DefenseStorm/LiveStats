@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Predicate;
@@ -79,6 +80,28 @@ public abstract class ServiceStats {
     /**
      * Records the execution time for the future produced by `subject` at a key based on `name`.
      *
+     * The key for the stats is "`name`/success" unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject A supplier which starts the task to be timed.
+     * @param <T>
+     * @return The same future produced by `subject`.
+     */
+    public <T> CompletableFuture<T> listenForCompletableTiming(
+            final String name, final Supplier<CompletableFuture<T>> subject) {
+        final long startNanos = System.nanoTime();
+        return subject.get().whenComplete((result, thrown) -> {
+            if (thrown == null) {
+                complete(appendSubType(name, false, true), startNanos);
+            } else {
+                complete(appendSubType(name, true, false), startNanos);
+            }
+        });
+    }
+
+    /**
+     * Records the execution time for the future produced by `subject` at a key based on `name`.
+     *
      * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
      * unless the task throws an exception, then it's "`name`/error".
      *
@@ -102,6 +125,31 @@ public abstract class ServiceStats {
             }
         }, MoreExecutors.directExecutor());
         return future;
+    }
+
+    /**
+     * Records the execution time for the future produced by `subject` at a key based on `name`.
+     *
+     * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
+     * unless the task throws an exception, then it's "`name`/error".
+     *
+     * @param name The base name used to determine which stats key to store the resulting timing entry.
+     * @param subject A supplier which starts the code to be timed.
+     * @param successful A predicate on the result of the supplied future to determine whether the task was successful.
+     * @param <T>
+     * @return The same future produced by `subject`.
+     */
+    public <T> CompletableFuture<T> listenForCompletableTiming(
+            final String name, final Supplier<CompletableFuture<T>> subject, final Predicate<T> successful) {
+        final long start = System.nanoTime();
+        return subject.get().whenComplete((result, thrown) -> {
+            if (thrown == null) {
+                complete(appendSubType(name, false, true), start);
+            } else {
+                final long end = System.nanoTime();
+                addTiming(appendSubType(name, successful.test(result), false), end - start, end);
+            }
+        });
     }
 
     /**
