@@ -9,7 +9,7 @@ import java.util.concurrent.locks.StampedLock;
 
 @ThreadSafe
 @ToString
-final class Quantile {
+public final class Quantile {
     private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
     private final StampedLock lock = new StampedLock();
