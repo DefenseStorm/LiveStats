@@ -90,13 +90,15 @@ public abstract class ServiceStats {
     public <T> CompletableFuture<T> timingOnCompletion(
             final String name, final Supplier<CompletableFuture<T>> subject) {
         final long startNanos = System.nanoTime();
-        return subject.get().whenComplete((result, thrown) -> {
+        final CompletableFuture<T> future = subject.get();
+        future.whenComplete((result, thrown) -> {
             if (thrown == null) {
                 complete(appendSubType(name, false, true), startNanos);
             } else {
                 complete(appendSubType(name, true, false), startNanos);
             }
         });
+        return future;
     }
 
     /**
@@ -142,7 +144,8 @@ public abstract class ServiceStats {
     public <T> CompletableFuture<T> timingOnCompletion(
             final String name, final Supplier<CompletableFuture<T>> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
-        return subject.get().whenComplete((result, thrown) -> {
+        final CompletableFuture<T> future = subject.get();
+        future.whenComplete((result, thrown) -> {
             if (thrown == null) {
                 complete(appendSubType(name, false, true), start);
             } else {
@@ -150,6 +153,7 @@ public abstract class ServiceStats {
                 addTiming(appendSubType(name, successful.test(result), false), end - start, end);
             }
         });
+        return future;
     }
 
     /**
