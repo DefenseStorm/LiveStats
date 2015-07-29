@@ -39,7 +39,7 @@ public final class LiveStats implements DoubleConsumer {
     private int decayCount = 0;
 
     public final ImmutableList<Quantile> quantiles;
-    private final long startNanos = System.nanoTime();
+    private final long startNanos;
     private final DecayConfig decayConfig;
 
     /**
@@ -64,6 +64,30 @@ public final class LiveStats implements DoubleConsumer {
         }
         this.quantiles = tilesBuilder.build();
         this.decayConfig = decayConfig;
+        this.startNanos = System.nanoTime();
+    }
+
+    @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
+    public LiveStats(LiveStats liveStats) {
+        final long stamp = liveStats.lock.readLock();
+        try {
+            this.min = liveStats.min;
+            this.decayedMin = liveStats.decayedMin;
+            this.max = liveStats.max;
+            this.sum = liveStats.sum;
+            this.sumCentralMoment2 = liveStats.sumCentralMoment2;
+            this.sumCentralMoment3 = liveStats.sumCentralMoment3;
+            this.sumCentralMoment4 = liveStats.sumCentralMoment4;
+            this.count = liveStats.count;
+            this.decayedCount = liveStats.decayedCount;
+            this.decayCount = liveStats.decayCount;
+
+            this.quantiles = liveStats.quantiles;
+            this.startNanos = liveStats.startNanos;
+            this.decayConfig = liveStats.decayConfig;
+        } finally {
+            liveStats.lock.unlockRead(stamp);
+        }
     }
 
     /**
