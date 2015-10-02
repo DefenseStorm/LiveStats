@@ -62,6 +62,7 @@ public abstract class ServiceStats {
      * @param <T>
      * @return The same future produced by `subject`.
      */
+    @Deprecated
     public <T> ListenableFuture<T> listenForTiming(
             final String name, final Supplier<ListenableFuture<T>> subject) {
         final long startNanos = System.nanoTime();
@@ -113,6 +114,7 @@ public abstract class ServiceStats {
      * @param <T>
      * @return The same future produced by `subject`.
      */
+    @Deprecated
     public <T> ListenableFuture<T> listenForTiming(
             final String name, final Supplier<ListenableFuture<T>> subject, final Predicate<T> successful) {
         final long start = System.nanoTime();
