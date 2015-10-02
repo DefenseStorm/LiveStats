@@ -94,9 +94,9 @@ public abstract class ServiceStats {
         final CompletableFuture<T> future = subject.get();
         future.whenComplete((result, thrown) -> {
             if (thrown == null) {
-                complete(appendSubType(name, false, true), startNanos);
-            } else {
                 complete(appendSubType(name, true, false), startNanos);
+            } else {
+                complete(appendSubType(name, false, true), startNanos);
             }
         });
         return future;
@@ -149,10 +149,10 @@ public abstract class ServiceStats {
         final CompletableFuture<T> future = subject.get();
         future.whenComplete((result, thrown) -> {
             if (thrown == null) {
-                complete(appendSubType(name, false, true), start);
-            } else {
-                final long end = System.nanoTime();
+                final long end = System.nanoTime(); // Count success test in overhead
                 addTiming(appendSubType(name, successful.test(result), false), end - start, end);
+            } else {
+                complete(appendSubType(name, false, true), start);
             }
         });
         return future;
