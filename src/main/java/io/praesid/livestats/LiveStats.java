@@ -13,7 +13,7 @@ import java.util.function.DoubleConsumer;
 
 @ThreadSafe
 @ToString(exclude = {"lock"})
-@EqualsAndHashCode(exclude = {"lock"})
+@EqualsAndHashCode(exclude = {"lock", "startNanos"})
 public final class LiveStats implements DoubleConsumer, Serializable {
 
     private final transient StampedLock lock;
