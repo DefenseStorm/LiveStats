@@ -11,7 +11,7 @@ import java.util.concurrent.locks.StampedLock;
 @ThreadSafe
 @ToString(exclude = {"lock", "initLock"})
 @EqualsAndHashCode(exclude = {"lock", "initLock", "positionDeltas"})
-class Quantile {
+public final class Quantile {
     private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
     private transient final StampedLock lock;
