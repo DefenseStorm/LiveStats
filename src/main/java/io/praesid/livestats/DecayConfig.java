@@ -9,7 +9,7 @@ import java.util.Objects;
 
 @ToString
 @EqualsAndHashCode
-public class DecayConfig {
+public final class DecayConfig {
     public static final DecayConfig NEVER = new DecayConfig();
 
     public final double multiplier;
