@@ -18,14 +18,17 @@ public final class LiveStats implements DoubleConsumer, Serializable {
 
     private final transient StampedLock lock;
 
+    // Use MAX_VALUE instead of POSITIVE_INFINITY because JSON cannot serialize infinity.
+    // Use -MAX_VALUE instead of MIN_VALUE because MIN_VALUE is close to zero, not negative infinity.
     @GuardedBy("lock")
-    private double min = Double.POSITIVE_INFINITY;
+    private double min = Double.MAX_VALUE;
     @GuardedBy("lock")
-    private double decayedMin = Double.POSITIVE_INFINITY;
+    private double decayedMin = Double.MAX_VALUE;
     @GuardedBy("lock")
-    private double max = Double.NEGATIVE_INFINITY;
+    private double max = -Double.MAX_VALUE;
     @GuardedBy("lock")
-    private double decayedMax = Double.NEGATIVE_INFINITY;
+    private double decayedMax = -Double.MAX_VALUE;
+
     @GuardedBy("lock")
     private double sum = 0;
     @GuardedBy("lock")

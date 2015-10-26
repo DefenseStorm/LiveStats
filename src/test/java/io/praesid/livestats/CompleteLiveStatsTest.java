@@ -81,6 +81,14 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
     @Test
     public void testSerialize() {
         final Gson gson = GsonUtils.newGson(false);
+
+        // Try default object
+        final LiveStats fresh = new LiveStats(0.99);
+        final String freshJson = gson.toJson(fresh);
+        final LiveStats restoredFresh = gson.fromJson(freshJson, LiveStats.class);
+        assertEquals(fresh, restoredFresh);
+
+        // Try LiveStats with data
         final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
                                10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
         final LiveStats liveStats = test("Serialize", Arrays.stream(test), knownMaxPes);
