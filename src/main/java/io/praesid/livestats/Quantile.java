@@ -1,5 +1,6 @@
 package io.praesid.livestats;
 
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -8,15 +9,17 @@ import java.util.Arrays;
 import java.util.concurrent.locks.StampedLock;
 
 @ThreadSafe
-@ToString
-public final class Quantile {
+@ToString(exclude = {"lock", "initLock"})
+@EqualsAndHashCode(exclude = {"lock", "initLock", "positionDeltas"})
+class Quantile {
     private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
 
-    private final StampedLock lock = new StampedLock();
-    private final StampedLock initLock = new StampedLock();
+    private transient final StampedLock lock;
+    private transient final StampedLock initLock;
 
+    // Immutable once set, how far the ideal positions move for each item. Use getPositionDeltas to lazy load it
     // length of positionDeltas and idealPositions is N_MARKERS-1 because the lowest idealPosition is always 1
-    private final double[] positionDeltas; // Immutable, how far the ideal positions move for each item
+    private transient double[] positionDeltas;
     @GuardedBy("lock")
     private final double[] idealPositions;
     @GuardedBy("lock")
@@ -31,9 +34,28 @@ public final class Quantile {
      * Constructs a single quantile object
      */
     public Quantile(double percentile) {
+        this.lock = new StampedLock();
+        this.initLock = new StampedLock();
         this.percentile = percentile;
         positionDeltas = new double[]{percentile / 2, percentile, (1 + percentile) / 2, 1};
         idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
+    }
+
+    /**
+     * This constructor is for Gson. It initializes the locks. The other values will be overriden by Gson.
+     */
+    private Quantile() {
+        this.lock = new StampedLock();
+        this.initLock = new StampedLock();
+        this.percentile = Double.NaN;
+        this.idealPositions = null;
+    }
+
+    private double[] getPositionDeltas() {
+        if (positionDeltas == null) {
+            positionDeltas = new double[]{percentile / 2, percentile, (1 + percentile) / 2, 1};
+        }
+        return positionDeltas;
     }
 
     /**
@@ -98,7 +120,7 @@ public final class Quantile {
             }
 
             for (int i = 0; i < idealPositions.length; i++) {
-                idealPositions[i] += positionDeltas[i]; // updated desired positions
+                idealPositions[i] += getPositionDeltas()[i]; // updated desired positions
             }
 
             adjust();

@@ -1,5 +1,7 @@
 package io.praesid.livestats;
 
+import com.google.gson.Gson;
+import io.praesid.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Test;
@@ -76,7 +78,18 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
         test("Bimodal", bx, bimodalMaxPes);
     }
 
-    private void test(final String name, final DoubleStream dataStream, final Stats maxPes) {
+    @Test
+    public void testSerialize() {
+        final Gson gson = GsonUtils.newGson(false);
+        final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
+                               10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
+        final LiveStats liveStats = test("Serialize", Arrays.stream(test), knownMaxPes);
+        final String json = gson.toJson(liveStats);
+        final LiveStats restoredLiveStats = gson.fromJson(json, LiveStats.class);
+        assertEquals(liveStats, restoredLiveStats);
+    }
+
+    private LiveStats test(final String name, final DoubleStream dataStream, final Stats maxPes) {
         final double[] data = dataStream.limit(SAMPLE_COUNT).toArray();
         final LiveStats stats = new LiveStats(TEST_TILES);
 
@@ -105,5 +118,7 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
         assertEquals("variance%e", 0., calculateError(live.variance, real.variance, real.variance), maxPes.variance);
         assertEquals("skewness%e", 0., calculateError(live.skewness, real.skewness, real.max - real.min), maxPes.skewness);
         assertEquals("kurtosis%e", 0., calculateError(live.kurtosis, real.kurtosis, real.kurtosis), maxPes.kurtosis);
+
+        return stats;
     }
 }

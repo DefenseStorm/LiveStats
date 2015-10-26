@@ -1,19 +1,16 @@
 package io.praesid.livestats;
 
 import com.google.common.base.Preconditions;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.time.Duration;
+import java.util.Objects;
 
 @ToString
+@EqualsAndHashCode
 public class DecayConfig {
-
-    public static final DecayConfig NEVER = new DecayConfig() {
-        @Override
-        public String toString() {
-            return "NEVER";
-        }
-    };
+    public static final DecayConfig NEVER = new DecayConfig();
 
     public final double multiplier;
     public final long period;

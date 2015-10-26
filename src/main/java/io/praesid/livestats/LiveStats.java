@@ -2,18 +2,21 @@ package io.praesid.livestats;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.Serializable;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.DoubleConsumer;
 
 @ThreadSafe
-@ToString
-public final class LiveStats implements DoubleConsumer {
+@ToString(exclude = {"lock"})
+@EqualsAndHashCode(exclude = {"lock"})
+public final class LiveStats implements DoubleConsumer, Serializable {
 
-    private final StampedLock lock = new StampedLock();
+    private final transient StampedLock lock;
 
     @GuardedBy("lock")
     private double min = Double.POSITIVE_INFINITY;
@@ -38,6 +41,7 @@ public final class LiveStats implements DoubleConsumer {
     @GuardedBy("lock")
     private int decayCount = 0;
 
+    // This requires a special Gson serializer
     public final ImmutableList<Quantile> quantiles;
     private final long startNanos;
     private final DecayConfig decayConfig;
@@ -52,12 +56,23 @@ public final class LiveStats implements DoubleConsumer {
     }
 
     /**
+     * This constructor is for Gson. It initializes the locks. The other values will be overriden by Gson.
+     */
+    private LiveStats() {
+        lock = new StampedLock();
+        quantiles = null;
+        startNanos = 0;
+        decayConfig = null;
+    }
+
+    /**
      * Constructs a LiveStats object which will exponentially decay collected stats over time
      *
      * @param decayConfig the configuration for time-based decay of statistics
      * @param quantiles Quantiles to track (eg. .5 for the 50th percentile)
      */
     public LiveStats(final DecayConfig decayConfig, final double... quantiles) {
+        lock = new StampedLock();
         final Builder<Quantile> tilesBuilder = ImmutableList.builder();
         for (final double tile : quantiles) {
             tilesBuilder.add(new Quantile(tile));
@@ -69,6 +84,7 @@ public final class LiveStats implements DoubleConsumer {
 
     @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
     public LiveStats(LiveStats liveStats) {
+        lock = new StampedLock();
         final long stamp = liveStats.lock.readLock();
         try {
             this.min = liveStats.min;
