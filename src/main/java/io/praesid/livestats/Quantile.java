@@ -37,12 +37,11 @@ public final class Quantile {
         this.lock = new StampedLock();
         this.initLock = new StampedLock();
         this.percentile = percentile;
-        positionDeltas = new double[]{percentile / 2, percentile, (1 + percentile) / 2, 1};
         idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
     }
 
     /**
-     * This constructor is for Gson. It initializes the locks. The other values will be overriden by Gson.
+     * This constructor is for Gson. It initializes the locks. The other values will be overridden by Gson.
      */
     private Quantile() {
         this.lock = new StampedLock();
