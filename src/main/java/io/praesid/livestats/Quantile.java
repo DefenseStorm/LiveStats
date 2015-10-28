@@ -131,20 +131,26 @@ public final class Quantile {
 
     private void adjust() {
         for (int i = 1; i < N_MARKERS - 1; i++) {
-            final double position = positions[i];
+            final double position = positions[i];                 // n
             final double positionDelta = idealPositions[i - 1] - position;
 
             if ((positionDelta >= 1 && positions[i + 1] > position + 1) ||
                     (positionDelta <= -1 && positions[i - 1] < position - 1)) {
-                final int direction = positionDelta > 0 ? 1 : -1;
+                final int direction = positionDelta > 0 ? 1 : -1; // d
+                final double heightBelow = heights[i - 1];        // q(i-1)
+                final double height = heights[i];                 // q
+                final double heightAbove = heights[i + 1];        // q(i+1)
+                final double positionBelow = positions[i - 1];    // n(i-1)
+                final double positionAbove = positions[i + 1];    // n(i+1)
 
-                final double heightBelow = heights[i - 1];
-                final double height = heights[i];
-                final double heightAbove = heights[i + 1];
-                final double positionBelow = positions[i - 1];
-                final double positionAbove = positions[i + 1];
-                final double newHeight = calcP2(direction, heightBelow, height, heightAbove,
-                                                positionBelow, position, positionAbove);
+                // q + d / (n(i+1) - n(i-1)) *
+                //     ((n - n(i-1) + d) * (q(i+1) - q) / (n(i+1) - n) + (n(i+1) - n - d) * (q - q(i-1)) / (n - n(i-1)))
+                final double signedPositionRange = direction / (positionAbove - positionBelow);
+                final double xBelow = position - positionBelow;
+                final double xAbove = positionAbove - position;
+                final double upperHalf = (xBelow + direction) * (heightAbove - height) / xAbove;
+                final double lowerHalf = (xAbove - direction) * (height - heightBelow) / xBelow;
+                final double newHeight = height + signedPositionRange * (upperHalf + lowerHalf);
 
                 if (heightBelow < newHeight && newHeight < heightAbove) {
                     heights[i] = newHeight;
@@ -158,23 +164,5 @@ public final class Quantile {
                 positions[i] = position + direction;
             }
         }
-    }
-
-    private static double calcP2(final /* d      */ int direction,
-                                 final /* q(i-1) */ double heightBelow,
-                                 final /* q(i)   */ double height,
-                                 final /* q(i+1) */ double heightAbove,
-                                 final /* n(i-1) */ double positionBelow,
-                                 final /* n(i)   */ double position,
-                                 final /* n(i+1) */ double positionAbove) {
-        // q + d / (n(i+1) - n(i-1) *
-        //     ((n - n(i-1) + d) * (q(i+1) - q) / (n(i+1) - n) + (n(i+1) - n - d) * (q - q(i-1)) / (n - n(i-1)))
-        final double xBelow = position - positionBelow;
-        final double xAbove = positionAbove - position;
-        final double belowScale = (xAbove - direction) / xBelow;
-        final double aboveScale = (xBelow + direction) / xAbove;
-        final double lowerHalf = belowScale * (height - heightBelow);
-        final double upperHalf = aboveScale * (heightAbove - height);
-        return height + Math.copySign((upperHalf + lowerHalf) / (positionAbove - positionBelow), direction);
     }
 }
