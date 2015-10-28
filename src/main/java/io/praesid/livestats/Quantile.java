@@ -13,13 +13,14 @@ import java.util.concurrent.locks.StampedLock;
 @EqualsAndHashCode(exclude = {"lock", "initLock", "positionDeltas"})
 public final class Quantile {
     private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
+    private static final double[] POSITION_DELTA_CONSTANT_PART = {0, 0, .5, 1};
+    private static final double[] POSITION_DELTA_MULTIPLIER = {.5, 1, .5, 0};
+
 
     private transient final StampedLock lock;
     private transient final StampedLock initLock;
 
-    // Immutable once set, how far the ideal positions move for each item. Use getPositionDeltas to lazy load it
-    // length of positionDeltas and idealPositions is N_MARKERS-1 because the lowest idealPosition is always 1
-    private transient double[] positionDeltas;
+    // length of idealPositions is N_MARKERS-1 because the lowest idealPosition is always 1
     @GuardedBy("lock")
     private final double[] idealPositions;
     @GuardedBy("lock")
@@ -48,13 +49,6 @@ public final class Quantile {
         this.initLock = new StampedLock();
         this.percentile = Double.NaN;
         this.idealPositions = null;
-    }
-
-    private double[] getPositionDeltas() {
-        if (positionDeltas == null) {
-            positionDeltas = new double[]{percentile / 2, percentile, (1 + percentile) / 2, 1};
-        }
-        return positionDeltas;
     }
 
     /**
@@ -119,7 +113,7 @@ public final class Quantile {
             }
 
             for (int i = 0; i < idealPositions.length; i++) {
-                idealPositions[i] += getPositionDeltas()[i]; // updated desired positions
+                idealPositions[i] += getPositionDelta(percentile, i); // updated desired positions
             }
 
             adjust();
@@ -163,5 +157,10 @@ public final class Quantile {
                 positions[i] = position + direction;
             }
         }
+    }
+
+    public static double getPositionDelta(final double percentile, final int pos) {
+        // how far the ideal positions move for each item
+        return POSITION_DELTA_CONSTANT_PART[pos] + POSITION_DELTA_MULTIPLIER[pos] * percentile;
     }
 }
