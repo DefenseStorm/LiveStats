@@ -16,6 +16,9 @@
         <junit.version>4.12</junit.version>
         <log4j.version>2.4.1</log4j.version>
         <lombok.version>1.16.6</lombok.version>
+
+        <snapshotRepositoryId>ossrh</snapshotRepositoryId>
+        <snapshotRepositoryUrl>https://oss.sonatype.org/content/repositories/snapshots</snapshotRepositoryUrl>
     </properties>
 
     <dependencies>
@@ -223,8 +226,8 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <id>${snapshotRepositoryId}</id>
+            <url>${snapshotRepositoryUrl}</url>
         </snapshotRepository>
         <repository>
             <id>ossrh</id>
