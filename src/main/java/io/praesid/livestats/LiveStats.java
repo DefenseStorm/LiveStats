@@ -1,13 +1,15 @@
 package io.praesid.livestats;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableList.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ObjectStreamException;
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.DoubleConsumer;
 
@@ -44,8 +46,9 @@ public final class LiveStats implements DoubleConsumer, Serializable {
     @GuardedBy("lock")
     private int decayCount = 0;
 
-    // This requires a special Gson serializer
-    public final ImmutableList<Quantile> quantiles;
+    // Treated as immutable
+    private final Quantile[] quantiles;
+
     private final long startNanos;
     private final DecayConfig decayConfig;
 
@@ -76,37 +79,40 @@ public final class LiveStats implements DoubleConsumer, Serializable {
      */
     public LiveStats(final DecayConfig decayConfig, final double... quantiles) {
         lock = new StampedLock();
-        final Builder<Quantile> tilesBuilder = ImmutableList.builder();
-        for (final double tile : quantiles) {
-            tilesBuilder.add(new Quantile(tile));
-        }
-        this.quantiles = tilesBuilder.build();
+        this.quantiles = Arrays.stream(quantiles).mapToObj(Quantile::new).toArray(Quantile[]::new);
         this.decayConfig = decayConfig;
         this.startNanos = System.nanoTime();
     }
 
+    /**
+     * Used during deserialization to produce a LiveStats with lock initialized
+     * @param liveStats
+     */
     @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
-    public LiveStats(LiveStats liveStats) {
+    private LiveStats(final LiveStats liveStats) {
         lock = new StampedLock();
-        final long stamp = liveStats.lock.readLock();
-        try {
-            this.min = liveStats.min;
-            this.decayedMin = liveStats.decayedMin;
-            this.max = liveStats.max;
-            this.sum = liveStats.sum;
-            this.sumCentralMoment2 = liveStats.sumCentralMoment2;
-            this.sumCentralMoment3 = liveStats.sumCentralMoment3;
-            this.sumCentralMoment4 = liveStats.sumCentralMoment4;
-            this.count = liveStats.count;
-            this.decayedCount = liveStats.decayedCount;
-            this.decayCount = liveStats.decayCount;
+        this.min = liveStats.min;
+        this.decayedMin = liveStats.decayedMin;
+        this.max = liveStats.max;
+        this.decayedMax = liveStats.decayedMax;
+        this.sum = liveStats.sum;
+        this.sumCentralMoment2 = liveStats.sumCentralMoment2;
+        this.sumCentralMoment3 = liveStats.sumCentralMoment3;
+        this.sumCentralMoment4 = liveStats.sumCentralMoment4;
+        this.count = liveStats.count;
+        this.decayedCount = liveStats.decayedCount;
+        this.decayCount = liveStats.decayCount;
 
-            this.quantiles = liveStats.quantiles;
-            this.startNanos = liveStats.startNanos;
-            this.decayConfig = liveStats.decayConfig;
-        } finally {
-            liveStats.lock.unlockRead(stamp);
+        this.quantiles = liveStats.quantiles;
+        this.startNanos = liveStats.startNanos;
+        this.decayConfig = liveStats.decayConfig;
+    }
+
+    private Object readResolve() throws ObjectStreamException {
+        if (lock != null) {
+            throw new IllegalStateException("Impossible: Transient field already set");
         }
+        return new LiveStats(this);
     }
 
     /**
@@ -332,6 +338,17 @@ public final class LiveStats implements DoubleConsumer, Serializable {
             lock.unlock(readStamp);
         }
         return myDecayCount;
+    }
+
+    /**
+     * @return Map of quantile to height
+     */
+    public Map<Double, Double> quantiles() {
+        final Map<Double, Double> quantileMap = new HashMap<>();
+        for (final Quantile quantile: quantiles) {
+            quantileMap.put(quantile.percentile, quantile.quantile());
+        }
+        return quantileMap;
     }
 
     /**

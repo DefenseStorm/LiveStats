@@ -5,11 +5,12 @@ import lombok.ToString;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.Serializable;
+import java.util.Collections;
 import java.util.Map;
-import java.util.Optional;
 
 @ToString
-public class Stats {
+public class Stats implements Serializable {
     private static final Logger log = LogManager.getLogger();
 
     public final String name;
@@ -35,11 +36,7 @@ public class Stats {
         variance = specialFloatsToNull(name, "variance", stats.variance());
         skewness = specialFloatsToNull(name, "skewness", stats.skewness());
         kurtosis = specialFloatsToNull(name, "kurtosis", stats.kurtosis());
-        final ImmutableMap.Builder<Double, Double> quantilesBuilder = ImmutableMap.builder();
-        stats.quantiles.forEach(q -> Optional.ofNullable(specialFloatsToNull(name, "" + q.percentile,
-                                                                             q.quantile()))
-                                             .ifPresent(quantile -> quantilesBuilder.put(q.percentile, quantile)));
-        quantiles = quantilesBuilder.build();
+        quantiles = Collections.unmodifiableMap(stats.quantiles());
         decayedMin = specialFloatsToNull(name, "decayedMin", stats.decayedMinimum());
         decayedMax = specialFloatsToNull(name, "decayedMax", stats.decayedMaximum());
         decayedN = specialFloatsToNull(name, "decayedN", stats.decayedNum());

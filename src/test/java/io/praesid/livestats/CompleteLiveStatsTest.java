@@ -1,11 +1,18 @@
 package io.praesid.livestats;
 
 import com.google.gson.Gson;
-import io.praesid.gson.GsonUtils;
+import com.google.gson.GsonBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Random;
@@ -13,7 +20,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 public class CompleteLiveStatsTest extends LiveStatsTestBase {
     private static final Logger log = LogManager.getLogger();
@@ -79,8 +86,8 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
     }
 
     @Test
-    public void testSerialize() {
-        final Gson gson = GsonUtils.newGson(false);
+    public void testGsonRoundtrip() {
+        final Gson gson = new GsonBuilder().create();
 
         // Try default object
         final LiveStats fresh = new LiveStats(0.99);
@@ -94,6 +101,45 @@ public class CompleteLiveStatsTest extends LiveStatsTestBase {
         final LiveStats liveStats = test("Serialize", Arrays.stream(test), knownMaxPes);
         final String json = gson.toJson(liveStats);
         final LiveStats restoredLiveStats = gson.fromJson(json, LiveStats.class);
+        assertEquals(liveStats, restoredLiveStats);
+    }
+
+    private byte[] toBytes(final LiveStats stats) throws IOException {
+        final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (final ObjectOutput os = new ObjectOutputStream(bos)) {
+            os.writeObject(stats);
+            return bos.toByteArray();
+        }
+    }
+
+    private LiveStats fromBytes(final byte[] statsBytes) throws IOException, ClassNotFoundException {
+        try (final ObjectInput is = new ObjectInputStream(new ByteArrayInputStream(statsBytes))) {
+            return (LiveStats)is.readObject();
+        }
+
+    }
+
+    @Test
+    public void testSerializeRoundtrip() throws Exception {
+
+        // Try default object
+        final LiveStats fresh = new LiveStats(0.99);
+        final LiveStats restoredFresh = fromBytes(toBytes(fresh));
+        assertEquals(fresh, restoredFresh);
+
+        restoredFresh.add(5.5);
+        fresh.add(5.5);
+        assertEquals(fresh, restoredFresh);
+
+        // Try LiveStats with data
+        final double[] test = {0.02,0.15,0.74,3.39,0.83,22.37,10.15,15.43,38.62,15.92,34.60,
+                               10.28,1.47,0.40,0.05,11.39,0.27,0.42,0.09,11.37};
+        final LiveStats liveStats = test("Serialize", Arrays.stream(test), knownMaxPes);
+        final LiveStats restoredLiveStats = fromBytes(toBytes(liveStats));
+        assertEquals(liveStats, restoredLiveStats);
+
+        restoredLiveStats.add(5.5);
+        liveStats.add(5.5);
         assertEquals(liveStats, restoredLiveStats);
     }
 

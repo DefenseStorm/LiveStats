@@ -5,17 +5,18 @@ import lombok.ToString;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ObjectStreamException;
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.concurrent.locks.StampedLock;
 
 @ThreadSafe
 @ToString(exclude = {"lock", "initLock"})
 @EqualsAndHashCode(exclude = {"lock", "initLock", "positionDeltas"})
-public final class Quantile {
+public final class Quantile implements Serializable {
     private static final int N_MARKERS = 5; // positionDeltas and idealPositions must be updated if this is changed
     private static final double[] POSITION_DELTA_CONSTANT_PART = {0, 0, .5, 1};
     private static final double[] POSITION_DELTA_MULTIPLIER = {.5, 1, .5, 0};
-
 
     private transient final StampedLock lock;
     private transient final StampedLock initLock;
@@ -24,9 +25,9 @@ public final class Quantile {
     @GuardedBy("lock")
     private final double[] idealPositions;
     @GuardedBy("lock")
-    private final double[] positions = {1, 2, 3, 4, 5};
+    private final double[] positions;
     @GuardedBy("lock")
-    private final double[] heights = new double[N_MARKERS];
+    private final double[] heights;
     @GuardedBy("initLock,lock") // guarded by both write locks, so either read lock guarantees visibility
     private int initializedMarkers = 0;
     public final double percentile;
@@ -38,7 +39,9 @@ public final class Quantile {
         this.lock = new StampedLock();
         this.initLock = new StampedLock();
         this.percentile = percentile;
-        idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
+        this.idealPositions = new double[]{1 + 2 * percentile, 1 + 4 * percentile, 3 + 2 * percentile, 5};
+        this.positions = new double[]{1, 2, 3, 4, 5};
+        this.heights = new double[N_MARKERS];
     }
 
     /**
@@ -49,6 +52,30 @@ public final class Quantile {
         this.initLock = new StampedLock();
         this.percentile = Double.NaN;
         this.idealPositions = null;
+        this.positions = null;
+        this.heights = null;
+    }
+
+    /**
+     * Used during deserialization to produce a Quantile with locks initialized
+     * @param quantile
+     */
+    @SuppressWarnings("AccessingNonPublicFieldOfAnotherObject")
+    private Quantile(final Quantile quantile) {
+        this.lock = new StampedLock();
+        this.initLock = new StampedLock();
+        this.idealPositions = quantile.idealPositions;
+        this.positions = quantile.positions;
+        this.heights = quantile.heights;
+        this.initializedMarkers = quantile.initializedMarkers;
+        this.percentile = quantile.percentile;
+    }
+
+    private Object readResolve() throws ObjectStreamException {
+        if (lock != null) {
+            throw new IllegalStateException("Impossible: Transient field already set");
+        }
+        return new Quantile(this);
     }
 
     /**
