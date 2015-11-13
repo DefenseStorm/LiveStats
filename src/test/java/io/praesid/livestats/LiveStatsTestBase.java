@@ -1,7 +1,5 @@
 package io.praesid.livestats;
 
-import com.google.common.util.concurrent.AtomicDouble;
-
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -54,18 +52,13 @@ public abstract class LiveStatsTestBase {
 
         final double avg = Arrays.stream(data).parallel().sum() / data.length;
 
-        final AtomicDouble s2 = new AtomicDouble(0);
-        final AtomicDouble s3 = new AtomicDouble(0);
-        final AtomicDouble s4 = new AtomicDouble(0);
-        Arrays.stream(data).parallel().forEach(x -> {
-            s2.addAndGet(Math.pow(x - avg, 2));
-            s3.addAndGet(Math.pow(x - avg, 3));
-            s4.addAndGet(Math.pow(x - avg, 4));
-        });
+        final double s2 = Arrays.stream(data).parallel().map(x -> Math.pow(x - avg, 2)).sum();
+        final double s3 = Arrays.stream(data).parallel().map(x -> Math.pow(x - avg, 3)).sum();
+        final double s4 = Arrays.stream(data).parallel().map(x -> Math.pow(x - avg, 4)).sum();
 
-        final double u2 = s2.get() / data.length;
-        final double u3 = s3.get() / data.length;
-        final double u4 = s4.get() / data.length;
+        final double u2 = s2 / data.length;
+        final double u3 = s3 / data.length;
+        final double u4 = s4 / data.length;
         final double skew = u3 == 0 ? 0 : (u3 / Math.pow(u2, 3./2));
         final double kurt = u4 == 0 ? 0 : (u4 / Math.pow(u2, 2) - 3);
 

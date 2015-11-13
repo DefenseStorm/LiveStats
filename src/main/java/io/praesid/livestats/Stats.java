@@ -1,6 +1,5 @@
 package io.praesid.livestats;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.ToString;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,7 +58,7 @@ public class Stats implements Serializable {
         this.variance = variance;
         this.skewness = skewness;
         this.kurtosis = kurtosis;
-        this.quantiles = ImmutableMap.copyOf(quantiles);
+        this.quantiles = Collections.unmodifiableMap(quantiles);
     }
 
     @SuppressWarnings("ReturnOfNull")

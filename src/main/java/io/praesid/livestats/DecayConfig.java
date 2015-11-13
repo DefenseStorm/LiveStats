@@ -1,6 +1,5 @@
 package io.praesid.livestats;
 
-import com.google.common.base.Preconditions;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
@@ -22,8 +21,9 @@ public final class DecayConfig implements Serializable {
      * @param multiplier The exponential moving average coefficient
      */
     public DecayConfig(final double multiplier) {
-        Preconditions.checkArgument(multiplier >= 0, "Multiplier must be >= 0");
-        Preconditions.checkArgument(multiplier < 1, "Multiplier must be < 1");
+        if (multiplier < 0 || multiplier >= 1) {
+            throw new IllegalArgumentException("Multiplier must be >= 0 and < 1");
+        }
         this.multiplier = multiplier;
         this.period = 0;
     }
@@ -37,10 +37,12 @@ public final class DecayConfig implements Serializable {
      * @param period The time period where the data is valid
      */
     public DecayConfig(final double multiplier, final Duration period) {
-        Preconditions.checkArgument(multiplier >= 0, "Multiplier must be >= 0");
-        Preconditions.checkArgument(multiplier < 1, "Multiplier must be < 1");
-        Preconditions.checkNotNull(period, "Period must be specified");
-        Preconditions.checkArgument(!period.isNegative() && !period.isZero(), "Period must be positive");
+        if (multiplier < 0 || multiplier >= 1) {
+            throw new IllegalArgumentException("Multiplier must be >= 0 and < 1");
+        }
+        if (period == null || period.isNegative() || period.isZero()) {
+            throw new NullPointerException("Period must be specified and positive");
+        }
         this.multiplier = multiplier;
         this.period = period.toNanos();
     }

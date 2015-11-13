@@ -1,25 +1,21 @@
 package io.praesid.livestats;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.concurrent.GuardedBy;
-import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.StampedLock;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public abstract class ServiceStats {
@@ -62,32 +58,6 @@ public abstract class ServiceStats {
      * @param <T>
      * @return The same future produced by `subject`.
      */
-    @Deprecated
-    public <T> ListenableFuture<T> listenForTiming(
-            final String name, final Supplier<ListenableFuture<T>> subject) {
-        final long startNanos = System.nanoTime();
-        final ListenableFuture<T> future = subject.get();
-        future.addListener(() -> {
-            try {
-                future.get(); // Called to trigger the future's exception throw
-                complete(appendSubType(name, true, false), startNanos);
-            } catch (final Throwable t) {
-                complete(appendSubType(name, false, true), startNanos);
-            }
-        }, MoreExecutors.directExecutor());
-        return future;
-    }
-
-    /**
-     * Records the execution time for the future produced by `subject` at a key based on `name`.
-     *
-     * The key for the stats is "`name`/success" unless the task throws an exception, then it's "`name`/error".
-     *
-     * @param name The base name used to determine which stats key to store the resulting timing entry.
-     * @param subject A supplier which starts the task to be timed.
-     * @param <T>
-     * @return The same future produced by `subject`.
-     */
     public <T> CompletableFuture<T> timingOnCompletion(
             final String name, final Supplier<CompletableFuture<T>> subject) {
         final long startNanos = System.nanoTime();
@@ -99,35 +69,6 @@ public abstract class ServiceStats {
                 complete(appendSubType(name, false, true), startNanos);
             }
         });
-        return future;
-    }
-
-    /**
-     * Records the execution time for the future produced by `subject` at a key based on `name`.
-     *
-     * The key for the stats is "`name`/success" or "`name`/failure" based on the supplied predicate,
-     * unless the task throws an exception, then it's "`name`/error".
-     *
-     * @param name The base name used to determine which stats key to store the resulting timing entry.
-     * @param subject A supplier which starts the code to be timed.
-     * @param successful A predicate on the result of the supplied future to determine whether the task was successful.
-     * @param <T>
-     * @return The same future produced by `subject`.
-     */
-    @Deprecated
-    public <T> ListenableFuture<T> listenForTiming(
-            final String name, final Supplier<ListenableFuture<T>> subject, final Predicate<T> successful) {
-        final long start = System.nanoTime();
-        final ListenableFuture<T> future = subject.get();
-        future.addListener(() -> {
-            try {
-                final T result = future.get();
-                final long end = System.nanoTime(); // Count success test in overhead
-                addTiming(appendSubType(name, successful.test(result), false), end - start, end);
-            } catch (final Throwable t) {
-                complete(appendSubType(name, false, true), start);
-            }
-        }, MoreExecutors.directExecutor());
         return future;
     }
 
@@ -276,13 +217,13 @@ public abstract class ServiceStats {
     }
 
     public static void configure(final DecayConfig decayConfig, final double... quantiles) {
-        configure(decayConfig, ImmutableMap.of(), Duration.ofDays(1), quantiles);
+        configure(decayConfig, Collections.emptyMap(), quantiles);
     }
 
     public static void configure(final DecayConfig defaultDecayConfig, final Map<String, DecayConfig> decayConfigMap,
-                                 final Duration unusedExpiration, final double... quantiles) {
+                                 final double... quantiles) {
         final long stamp = lock.writeLock();
-        instance = new RealServiceStats(defaultDecayConfig, decayConfigMap, unusedExpiration, quantiles);
+        instance = new RealServiceStats(defaultDecayConfig, decayConfigMap, quantiles);
         lock.unlock(stamp);
     }
 
@@ -305,28 +246,26 @@ public abstract class ServiceStats {
     }
 
     private static class RealServiceStats extends ServiceStats {
-        private final LoadingCache<String, LiveStats> stats;
+        private final ConcurrentMap<String, LiveStats> stats = new ConcurrentHashMap<>();
+        private final Function<String, DecayConfig> getDecayConfig;
+        private final double[] quantiles;
 
         private RealServiceStats(final DecayConfig defaultDecayConfig, final Map<String, DecayConfig> decayConfigMap,
-                                 final Duration unusedExpiration, final double... quantiles) {
-            stats = CacheBuilder
-                    .newBuilder()
-                    .expireAfterAccess(unusedExpiration.toMillis(), TimeUnit.MILLISECONDS)
-                    .concurrencyLevel(1)
-                    .build(new CacheLoader<String, LiveStats>() {
-                        @Override
-                        public LiveStats load(final String key) throws Exception {
-                            return new LiveStats(decayConfigMap.getOrDefault(key, defaultDecayConfig), quantiles);
-                        }
-                    });
+                                 final double... quantiles) {
+            this.getDecayConfig = key -> decayConfigMap.getOrDefault(key, defaultDecayConfig);
+            this.quantiles = Arrays.copyOf(quantiles, quantiles.length);
         }
 
         @Override
         public Stats[] consume() {
-            final Map<String, LiveStats> savedStats = new TreeMap<>(stats.asMap());
-            stats.invalidateAll(savedStats.keySet());
+            final Map<String, LiveStats> savedStats = new TreeMap<>(stats);
+            savedStats.keySet().forEach(stats::remove);
             // Stats overhead is in the microsecond range, give a millisecond here for anyone in addTiming() to finish
-            Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+            try {
+                Thread.sleep(1);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             return savedStats.entrySet().stream()
                              .peek(e -> e.getValue().decayByTime())
                              .map(e -> new Stats(e.getKey(), e.getValue()))
@@ -336,7 +275,9 @@ public abstract class ServiceStats {
         @Override
         public Stream<Stats> get(final String... statsNames) {
             final Map<String, LiveStats> statsToReturn =
-                    statsNames.length == 0 ? stats.asMap() : stats.getAllPresent(Arrays.asList(statsNames));
+                    statsNames.length == 0 ? Collections.unmodifiableMap(stats) :
+                            Arrays.stream(statsNames)
+                                  .collect(Collectors.toMap(Function.identity(), stats::get));
             return statsToReturn.entrySet().stream()
                        .peek(e -> e.getValue().decayByTime())
                        .map(e -> new Stats(e.getKey(), e.getValue()));
@@ -344,10 +285,11 @@ public abstract class ServiceStats {
 
         @Override
         protected void addTiming(final String key, final long nanos, final long endNanos) {
-            stats.getUnchecked(key).add(nanos);
+            stats.computeIfAbsent(key, name -> new LiveStats(getDecayConfig.apply(name), quantiles)).add(nanos);
             if (log.isTraceEnabled()) {
                 final long overhead = System.nanoTime() - endNanos;
-                stats.getUnchecked("overhead").add(overhead);
+                stats.computeIfAbsent("overhead", name -> new LiveStats(getDecayConfig.apply(name), quantiles))
+                     .add(overhead);
             }
         }
     }
