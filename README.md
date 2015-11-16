@@ -8,10 +8,6 @@ LiveStats doesn't keep any items in memory, only estimates of the statistics. Th
 
 LiveStats requires Java 8.
 
-## Building
-
-I haven't replaced our internal pom and gotten this pushed to maven central yet.  Therefore to use it, you'll need to remove our internal root pom as the parent pom, and add dependency versions for each of the dependencies.  Then you can build and use it in your projects.
-
 ## Example usage
 
 See tests.
